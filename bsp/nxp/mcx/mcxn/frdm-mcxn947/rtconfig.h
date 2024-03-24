@@ -91,6 +91,7 @@
 #define RT_USING_SERIAL_V1
 #define RT_SERIAL_USING_DMA
 #define RT_SERIAL_RB_BUFSZ 64
+#define RT_USING_ADC
 #define RT_USING_PIN
 #define RT_USING_HWTIMER
 
@@ -286,6 +287,9 @@
 #define BSP_USING_UART4
 #define BSP_USING_UART5
 #define BSP_USING_UART2
+#define BSP_USING_ADC
+#define BSP_USING_ADC0
+#define BSP_USING_ADC0_CH0
 
 /* Board extended module Drivers */
 
