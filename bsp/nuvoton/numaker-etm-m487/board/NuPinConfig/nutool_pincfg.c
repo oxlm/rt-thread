@@ -298,15 +298,15 @@ void nutool_pincfg_deinit_pg(void)
 
 void nutool_pincfg_init_ph(void)
 {
-    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk);
-    SYS->GPH_MFPL |= (SYS_GPH_MFPL_PH7MFP_GPIO | SYS_GPH_MFPL_PH6MFP_GPIO | SYS_GPH_MFPL_PH5MFP_GPIO | SYS_GPH_MFPL_PH4MFP_GPIO | SYS_GPH_MFPL_PH3MFP_GPIO);
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk | SYS_GPH_MFPL_PH2MFP_Msk);
+    SYS->GPH_MFPL |= (SYS_GPH_MFPL_PH7MFP_GPIO | SYS_GPH_MFPL_PH6MFP_GPIO | SYS_GPH_MFPL_PH5MFP_GPIO | SYS_GPH_MFPL_PH4MFP_GPIO | SYS_GPH_MFPL_PH3MFP_GPIO | SYS_GPH_MFPL_PH2MFP_GPIO);
 
     return;
 }
 
 void nutool_pincfg_deinit_ph(void)
 {
-    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk);
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk | SYS_GPH_MFPL_PH2MFP_Msk);
 
     return;
 }
@@ -472,7 +472,7 @@ void nutool_pincfg_init(void)
     nutool_pincfg_init_spi3();
     nutool_pincfg_init_uart0();
     nutool_pincfg_init_uart1();
-    nutool_pincfg_init_uart5();
+    //nutool_pincfg_init_uart5();
     nutool_pincfg_init_usb();
 
     return;
@@ -502,7 +502,7 @@ void nutool_pincfg_deinit(void)
     nutool_pincfg_deinit_spi3();
     nutool_pincfg_deinit_uart0();
     nutool_pincfg_deinit_uart1();
-    nutool_pincfg_deinit_uart5();
+    //nutool_pincfg_deinit_uart5();
     nutool_pincfg_deinit_usb();
 
     return;
