@@ -4,9 +4,127 @@ Import('RTT_ROOT')
 from building import *
 
 cwd     = GetCurrentDir()
-src = Glob('*.c') + Glob('*.cpp')
+src = Glob('*.cpp')
 CPPPATH = [cwd]
 group = []
+
+
+# add the general drivers.
+src += Split("""
+    drv_common.c
+	drv_ebi.c
+""")
+
+if GetDepend(['BSP_USING_BPWM_CAPTURE']):
+    src += ['drv_bpwm_capture.c']
+
+if GetDepend(['BSP_USING_BPWM']):
+    src += ['drv_bpwm.c']
+
+if GetDepend(['BSP_USING_CAN']):
+    src += ['drv_can.c']
+
+if GetDepend(['BSP_USING_CLK']):
+    src += ['drv_clk.c']
+
+if GetDepend('BSP_USING_CRC') and GetDepend('RT_HWCRYPTO_USING_CRC'):
+    src += ['drv_crc.c']
+
+if (GetDepend('BSP_USING_CRYPTO') or GetDepend('BSP_USING_TRNG') or GetDepend('BSP_USING_CRC')) and GetDepend('RT_USING_HWCRYPTO'):
+    src += ['drv_crypto.c']
+
+if GetDepend(['BSP_USING_EADC']):
+    src += ['drv_eadc.c']
+	
+if GetDepend(['BSP_USING_ECAP']):
+    src += ['drv_ecap.c']
+
+if GetDepend('BSP_USING_EMAC') and ( GetDepend('RT_USING_LWIP') ):
+    src += ['drv_emac.c']
+	
+if GetDepend(['BSP_USING_EPWM_CAPTURE']):
+    src += ['drv_epwm_capture.c']
+	
+if GetDepend(['BSP_USING_EPWM']):
+    src += ['drv_epwm.c']
+
+if GetDepend(['BSP_USING_FMC']):
+    src += ['drv_fmc.c']
+
+if GetDepend('BSP_USING_GPIO') and GetDepend('RT_USING_PIN'):
+    src += ['drv_gpio.c']
+
+if GetDepend(['BSP_USING_HSOTG']):
+    src += ['drv_hsotg.c']
+
+if GetDepend(['BSP_USING_HSUSBD']):
+    src += ['drv_hsusbd.c']
+
+if GetDepend(['BSP_USING_I2C']):
+    src += ['drv_i2c.c']
+
+if GetDepend(['BSP_USING_I2S']):
+    src += ['drv_i2s.c']
+
+if GetDepend(['BSP_USING_PDMA']):
+    src += ['drv_pdma.c']
+
+if GetDepend(['BSP_USING_QEI']):
+    src += ['drv_qei.c']
+
+if GetDepend(['BSP_USING_QSPI']):
+    src += ['drv_qspi.c']
+
+if GetDepend(['BSP_USING_RTC']):
+    src += ['drv_rtc.c']
+
+if GetDepend(['BSP_USING_SCUART']):
+    src += ['drv_scuart.c']
+
+if GetDepend(['BSP_USING_SDH']):
+    src += ['drv_sdh.c','drv_sdio.c']
+
+if GetDepend('BSP_USING_SOFT_I2C') and GetDepend('BSP_USING_GPIO') and GetDepend('RT_USING_I2C_BITOPS') and GetDepend('RT_USING_I2C') and GetDepend('RT_USING_PIN'):
+    src += ['drv_softi2c.c']
+
+if GetDepend(['BSP_USING_SPI']):
+    src += ['drv_spi.c']
+
+if GetDepend(['BSP_USING_SPII2S']):
+    src += ['drv_spii2s.c']
+
+if GetDepend(['BSP_USING_TIMER_CAPTURE']):
+    src += ['drv_timer_capture.c']
+
+if GetDepend('BSP_USING_TIMER') and GetDepend('RT_USING_HWTIMER'):
+    src += ['drv_timer.c']
+
+if GetDepend('BSP_USING_TPWM') and GetDepend('RT_USING_PWM'):
+    src += ['drv_tpwm.c']
+
+if GetDepend('BSP_USING_TRNG') and GetDepend('RT_HWCRYPTO_USING_RNG'):
+    src += ['drv_trng.c']
+
+if GetDepend(['BSP_USING_UART']):
+    src += ['drv_uart.c']
+
+if GetDepend('BSP_USING_UI2C') and GetDepend('RT_USING_I2C'):
+    src += ['drv_ui2c.c']
+
+if GetDepend(['BSP_USING_USBD']):
+    src += ['drv_usbd.c']
+
+if GetDepend('BSP_USING_USBH') or GetDepend('BSP_USING_HSUSBH'):
+    src += ['drv_usbhost.c']
+
+if GetDepend(['BSP_USING_USPI']):
+    src += ['drv_uspi.c']
+
+if GetDepend(['BSP_USING_UUART']):
+    src += ['drv_uuart.c']
+
+if GetDepend(['BSP_USING_WDT']):
+    src += ['drv_wdt.c']
 
 # USB driver constrain
 if GetDepend('BOARD_USING_HSUSBD') and ( GetDepend('BSP_USING_USBD') or GetDepend('BSP_USING_HSUSBH') or GetDepend('BSP_USING_HSOTG') ):
