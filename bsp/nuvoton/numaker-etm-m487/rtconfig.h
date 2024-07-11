@@ -84,7 +84,6 @@
 #define RT_USING_DFS
 #define DFS_USING_POSIX
 #define DFS_USING_WORKDIR
-#define RT_USING_DFS_MNTTABLE
 #define DFS_FD_MAX 32
 #define RT_USING_DFS_V1
 #define DFS_FILESYSTEMS_MAX 8
@@ -203,65 +202,6 @@
 
 /* Network */
 
-#define RT_USING_SAL
-#define SAL_INTERNET_CHECK
-
-/* Docking with protocol stacks */
-
-#define SAL_USING_LWIP
-/* end of Docking with protocol stacks */
-#define SAL_USING_POSIX
-#define RT_USING_NETDEV
-#define NETDEV_USING_IFCONFIG
-#define NETDEV_USING_PING
-#define NETDEV_USING_NETSTAT
-#define NETDEV_USING_AUTO_DEFAULT
-#define NETDEV_IPV4 1
-#define NETDEV_IPV6 0
-#define RT_USING_LWIP
-#define RT_USING_LWIP203
-#define RT_USING_LWIP_VER_NUM 0x20003
-#define RT_LWIP_MEM_ALIGNMENT 4
-#define RT_LWIP_IGMP
-#define RT_LWIP_ICMP
-#define RT_LWIP_DNS
-#define RT_LWIP_DHCP
-#define IP_SOF_BROADCAST 1
-#define IP_SOF_BROADCAST_RECV 1
-
-/* Static IPv4 Address */
-
-#define RT_LWIP_IPADDR "192.168.1.30"
-#define RT_LWIP_GWADDR "192.168.1.1"
-#define RT_LWIP_MSKADDR "255.255.255.0"
-/* end of Static IPv4 Address */
-#define RT_LWIP_UDP
-#define RT_LWIP_TCP
-#define RT_LWIP_RAW
-#define RT_MEMP_NUM_NETCONN 8
-#define RT_LWIP_PBUF_NUM 16
-#define RT_LWIP_RAW_PCB_NUM 4
-#define RT_LWIP_UDP_PCB_NUM 4
-#define RT_LWIP_TCP_PCB_NUM 4
-#define RT_LWIP_TCP_SEG_NUM 40
-#define RT_LWIP_TCP_SND_BUF 8196
-#define RT_LWIP_TCP_WND 8196
-#define RT_LWIP_TCPTHREAD_PRIORITY 10
-#define RT_LWIP_TCPTHREAD_MBOX_SIZE 8
-#define RT_LWIP_TCPTHREAD_STACKSIZE 1024
-#define RT_LWIP_ETHTHREAD_PRIORITY 12
-#define RT_LWIP_ETHTHREAD_STACKSIZE 1024
-#define RT_LWIP_ETHTHREAD_MBOX_SIZE 8
-#define LWIP_NETIF_STATUS_CALLBACK 1
-#define LWIP_NETIF_LINK_CALLBACK 1
-#define RT_LWIP_NETIF_NAMESIZE 6
-#define SO_REUSE 1
-#define LWIP_SO_RCVTIMEO 1
-#define LWIP_SO_SNDTIMEO 1
-#define LWIP_SO_RCVBUF 1
-#define LWIP_SO_LINGER 0
-#define LWIP_NETIF_LOOPBACK 0
-#define RT_LWIP_USING_PING
 /* end of Network */
 
 /* Memory protection */
@@ -482,23 +422,18 @@
 #define BSP_USING_GPIO
 #define BSP_USING_CLK
 #define NU_CLK_INVOKE_WKTMR
-#define BSP_USING_EMAC
-#define NU_EMAC_PDMA_MEMCOPY
-#define NU_EMAC_PDMA_MEMCOPY_THRESHOLD 128
 #define BSP_USING_RTC
+#define NU_RTC_SUPPORT_MSH_CMD
 #define BSP_USING_TMR
 #define BSP_USING_UART
 #define BSP_USING_UART0
 #define BSP_USING_I2C
 #define BSP_USING_I2C1
-#define BSP_USING_I2C2
 #define BSP_USING_SPI
 #define BSP_USING_SPI0_NONE
 #define BSP_USING_SPI1_NONE
 #define BSP_USING_SPI2_NONE
 #define BSP_USING_SPI3
-#define BSP_USING_I2S
-#define NU_I2S_DMA_FIFO_SIZE 2048
 #define BSP_USING_CRYPTO
 #define BSP_USING_CRC
 #define NU_CRC_USE_PDMA
@@ -511,8 +446,6 @@
 /* On-board Peripheral Drivers */
 
 #define BSP_USING_NULINKME
-#define BOARD_USING_IP101GR
-#define BOARD_USING_NAU88L25
 #define BOARD_USING_USB_D_H
 #define BOARD_USING_HSUSBH_USBD
 /* end of On-board Peripheral Drivers */
@@ -524,8 +457,6 @@
 /* Nuvoton Packages Config */
 
 #define NU_PKG_USING_UTILS
-#define NU_PKG_USING_DEMO
-#define NU_PKG_USING_NAU88L25
 /* end of Nuvoton Packages Config */
 /* end of Hardware Drivers Config */
 
