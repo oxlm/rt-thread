@@ -13,6 +13,7 @@ MCU:M487JIDAE(LQFP144)
 ********************/
 
 #include "M480.h"
+#include "rtconfig.h"
 
 void nutool_pincfg_init_bpwm0(void)
 {
@@ -298,16 +299,24 @@ void nutool_pincfg_deinit_pg(void)
 
 void nutool_pincfg_init_ph(void)
 {
-    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk | SYS_GPH_MFPL_PH2MFP_Msk);
-    SYS->GPH_MFPL |= (SYS_GPH_MFPL_PH7MFP_GPIO | SYS_GPH_MFPL_PH6MFP_GPIO | SYS_GPH_MFPL_PH5MFP_GPIO | SYS_GPH_MFPL_PH4MFP_GPIO | SYS_GPH_MFPL_PH3MFP_GPIO | SYS_GPH_MFPL_PH2MFP_GPIO);
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk );
+    SYS->GPH_MFPL |= (SYS_GPH_MFPL_PH7MFP_GPIO | SYS_GPH_MFPL_PH6MFP_GPIO | SYS_GPH_MFPL_PH5MFP_GPIO | SYS_GPH_MFPL_PH4MFP_GPIO | SYS_GPH_MFPL_PH3MFP_GPIO );
+
+#if !defined(BSP_USING_UART5)
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH2MFP_Msk | SYS_GPH_MFPL_PH1MFP_Msk | SYS_GPH_MFPL_PH0MFP_Msk);
+    SYS->GPH_MFPL |= (SYS_GPH_MFPL_PH2MFP_GPIO | SYS_GPH_MFPL_PH1MFP_GPIO | SYS_GPH_MFPL_PH0MFP_GPIO);
+#endif
 
     return;
 }
 
 void nutool_pincfg_deinit_ph(void)
 {
-    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk | SYS_GPH_MFPL_PH2MFP_Msk);
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH7MFP_Msk | SYS_GPH_MFPL_PH6MFP_Msk | SYS_GPH_MFPL_PH5MFP_Msk | SYS_GPH_MFPL_PH4MFP_Msk | SYS_GPH_MFPL_PH3MFP_Msk );
 
+#if !defined(BSP_USING_UART5)
+    SYS->GPH_MFPL &= ~(SYS_GPH_MFPL_PH2MFP_Msk | SYS_GPH_MFPL_PH1MFP_Msk | SYS_GPH_MFPL_PH0MFP_Msk);
+#endif
     return;
 }
 
@@ -470,9 +479,15 @@ void nutool_pincfg_init(void)
     nutool_pincfg_init_qspi0();
     nutool_pincfg_init_sd0();
     nutool_pincfg_init_spi3();
+#if defined(BSP_USING_UART0)
     nutool_pincfg_init_uart0();
+#endif
+#if defined(BSP_USING_UART1)
     nutool_pincfg_init_uart1();
-    //nutool_pincfg_init_uart5();
+#endif
+#if defined(BSP_USING_UART5)
+    nutool_pincfg_init_uart5();
+#endif
     nutool_pincfg_init_usb();
 
     return;
@@ -500,9 +515,15 @@ void nutool_pincfg_deinit(void)
     nutool_pincfg_deinit_qspi0();
     nutool_pincfg_deinit_sd0();
     nutool_pincfg_deinit_spi3();
+#if defined(BSP_USING_UART0)
     nutool_pincfg_deinit_uart0();
+#endif
+#if defined(BSP_USING_UART1)
     nutool_pincfg_deinit_uart1();
-    //nutool_pincfg_deinit_uart5();
+#endif
+#if defined(BSP_USING_UART5)
+    nutool_pincfg_deinit_uart5();
+#endif
     nutool_pincfg_deinit_usb();
 
     return;

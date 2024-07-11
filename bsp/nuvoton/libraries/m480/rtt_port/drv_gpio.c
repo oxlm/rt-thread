@@ -150,7 +150,6 @@ static void nu_gpio_mode(struct rt_device *device, rt_base_t pin, rt_uint8_t mod
     }
     else if (mode == PIN_MODE_OUTPUT)
     {
-        rt_kprintf("port %0x\n\r",pin);
         GPIO_SetMode(PORT, NU_GET_PIN_MASK(NU_GET_PINS(pin)), GPIO_MODE_OUTPUT);
     }
     else if (mode == PIN_MODE_INPUT)
