@@ -39,17 +39,17 @@
     case BSP_IO_PORT_01_PIN_11:             \
     case BSP_IO_PORT_04_PIN_02:             \
     case BSP_IO_PORT_04_PIN_11:             \
-    case BSP_IO_PORT_0A_PIN_10:             \
+    case BSP_IO_PORT_10_PIN_10:             \
         return 4;                           \
     case BSP_IO_PORT_03_PIN_02:             \
     case BSP_IO_PORT_04_PIN_01:             \
     case BSP_IO_PORT_04_PIN_10:             \
-    case BSP_IO_PORT_0A_PIN_09:             \
+    case BSP_IO_PORT_10_PIN_09:             \
         return 5;                           \
     case BSP_IO_PORT_00_PIN_00:             \
     case BSP_IO_PORT_03_PIN_01:             \
     case BSP_IO_PORT_04_PIN_09:             \
-    case BSP_IO_PORT_0A_PIN_08:             \
+    case BSP_IO_PORT_10_PIN_08:             \
         return 6;                           \
     case BSP_IO_PORT_00_PIN_01:             \
     case BSP_IO_PORT_04_PIN_08:             \
