@@ -1,9 +1,9 @@
-﻿# NuMaker-PFM-M487
+﻿# NuMaker-ETM-M487
 
 ## 1. Introduction
-NuMaker-PFM-M487 provides multiple networking, interfaces, audio recording, playback functions, and flexible extended data storage. 
+NuMaker-ETM-M487 provides multiple networking, interfaces, audio recording, playback functions, and flexible extended data storage. 
 
-[![NuMaker-PFM-M487](https://i.imgur.com/k8krqTW.png "NuMaker-PFM-M487")](https://i.imgur.com/k8krqTW.png "NuMaker-PFM-M487")
+[![NuMaker-ETM-M487](https://i.imgur.com/k8krqTW.png "NuMaker-ETM-M487")](https://i.imgur.com/k8krqTW.png "NuMaker-ETM-M487")
 
 ### 1.1 MCU specification
 
@@ -48,7 +48,7 @@ Notice: Please install Nu-Link_Keil_Driver or Nu-Link_IAR_Driver for development
 
 ## 3. Program firmware
 ### Step 1:
-At first, you need to configure ISW1 switch on the NuMaker-PFM-M487 board. Set the four switches to ‘ON’ position. After the configuration is done,  connect the NuMaker-PFM-M487 board and your computer using the USB Micro cable. After that, window manager will show a ‘NuMicro MCU’ virtual disk. Finally, you will use this virtual disk to burn firmware.
+At first, you need to configure ISW1 switch on the NuMaker-ETM-M487 board. Set the four switches to ‘ON’ position. After the configuration is done,  connect the NuMaker-ETM-M487 board and your computer using the USB Micro cable. After that, window manager will show a ‘NuMicro MCU’ virtual disk. Finally, you will use this virtual disk to burn firmware.
 
 [![NuLinkMe](https://i.imgur.com/daoohon.png "NuLinkMe")](https://i.imgur.com/daoohon.png "NuLinkMe")
 
@@ -71,6 +71,6 @@ You can use Tera Term terminate emulator (or other software) to type commands of
 * [Download board schematics][2]
 * [Download MCU TRM][3]
 
-  [1]: https://direct.nuvoton.com/en/numaker-pfm-m487
+  [1]: https://direct.nuvoton.com/en/numaker-etm-m487
   [2]: https://www.nuvoton.com/resource-download.jsp?tp_GUID=HL0120180420145943
   [3]: https://www.nuvoton.com/resource-download.jsp?tp_GUID=DA05-M480
