@@ -551,6 +551,33 @@ menu "Hardware Drivers Config"
     endmenu
 
     menu "Board extended module Drivers"
+        menuconfig BSP_USING_RRH62000
+            bool "Enable RRH62000"
+        if BSP_USING_RRH62000
+            config BSP_USING_RRH62000_TEMP
+                bool "Enable RRH62000 Temperature"
+                    default n
+
+            config BSP_USING_RRH62000_HUMI
+                bool "Enable RRH62000 Humidity"
+                    default n
+
+            config BSP_USING_RRH62000_TVOC
+                bool "Enable RRH62000 TVOC"
+                    default n
+
+            config BSP_USING_RRH62000_ECO2
+                bool "Enable RRH62000 ECO2"
+                    default n
+
+            config BSP_USING_RRH62000_DUST
+                bool "Enable RRH62000 Dust"
+                    default n
+
+            config BSP_USING_RRH62000_IAQ
+                bool "Enable RRH62000 IAQ"
+                    default n
+        endif
 
     endmenu
 endmenu

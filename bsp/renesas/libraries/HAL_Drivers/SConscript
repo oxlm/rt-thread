@@ -68,6 +68,9 @@ if GetDepend(['BSP_USING_SDHI']):
 if GetDepend(['BSP_USING_LCD']):
     src += ['drv_lcd.c']
 
+if GetDepend(['BSP_USING_RRH62000']):
+    src += ['drv_rrh62000.c','rrh62000.c'] 
+
 path =  [cwd]
 path += [cwd + '/config']
 
