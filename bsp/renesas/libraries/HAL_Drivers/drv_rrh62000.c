@@ -455,10 +455,15 @@ __exit:
 }
 #endif
 
-int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
+static int rrh62000_device_register(void)
 {
     rt_int8_t result;
     struct sensor_device *dev;
+    const char *name = "rrh62000";
+    struct rt_sensor_config      cfg = {
+        .mode = RT_SENSOR_MODE_POLLING,
+        .power = RT_SENSOR_POWER_DOWN,
+    };
 
     dev = rrh62000_param_init();
     if(dev == RT_NULL)
@@ -467,7 +472,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
     }
 
 #ifdef BSP_USING_RRH62000_TEMP
-    result = rrh62000_register_temperature(name, cfg, dev);
+    result = rrh62000_register_temperature(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -475,7 +480,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
 #endif
 
 #ifdef BSP_USING_RRH62000_HUMI
-    result = rrh62000_register_humidity(name, cfg, dev);
+    result = rrh62000_register_humidity(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -483,7 +488,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
 #endif
 
 #ifdef BSP_USING_RRH62000_TVOC
-    result = rrh62000_register_TVOC(name, cfg, dev);
+    result = rrh62000_register_TVOC(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -491,7 +496,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
 #endif
 
 #ifdef BSP_USING_RRH62000_DUST
-    result = rrh62000_register_Dust(name, cfg, dev);
+    result = rrh62000_register_Dust(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -499,7 +504,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
 #endif
 
 #ifdef BSP_USING_RRH62000_ECO2
-    result = rrh62000_register_ECO2(name, cfg, dev);
+    result = rrh62000_register_ECO2(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -507,7 +512,7 @@ int rt_hw_init(const char *name, struct rt_sensor_config *cfg)
 #endif
 
 #ifdef BSP_USING_RRH62000_IAQ
-    result = rrh62000_register_IAQ(name, cfg, dev);
+    result = rrh62000_register_IAQ(name, &cfg, dev);
     if (result != RT_EOK)
     {
         goto __exit;
@@ -520,19 +525,6 @@ __exit:
     if(dev)
         rt_free(dev);
     return -RT_ERROR;
-}
-
-static int rrh62000_device_register(void)
-{
-    struct rt_sensor_config      cfg = {
-        .mode = RT_SENSOR_MODE_POLLING,
-        .power = RT_SENSOR_POWER_DOWN,
-    };
-
-    rt_hw_init("rrh62000", &cfg);
-
-    return RT_EOK;
-
 }
 INIT_DEVICE_EXPORT(rrh62000_device_register);
 

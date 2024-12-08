@@ -552,7 +552,8 @@ menu "Hardware Drivers Config"
 
     menu "Board extended module Drivers"
         menuconfig BSP_USING_RRH62000
-            bool "Enable RRH62000"
+        bool "Enable RRH62000"
+        default n
         if BSP_USING_RRH62000
             config BSP_USING_RRH62000_TEMP
                 bool "Enable RRH62000 Temperature"
