@@ -98,10 +98,18 @@ menu "On-chip Peripheral Drivers"
         select RT_USING_DFS_ELMFAT
         default y
 
-    config BSP_USING_RTC
-        bool "Enable RTC"
-        select RT_USING_RTC
-        default y
+    menuconfig BSP_USING_RTC
+		config BSP_USING_RTC
+			bool "Enable RTC"
+			select RT_USING_RTC
+			default y
+		
+            if BSP_USING_RTC
+                config BSP_USING_ALARM
+                    bool "Enable Alarm"
+                    default y
+            endif
+
 
     config BSP_USING_WDT
         bool "Enable WatchDog"

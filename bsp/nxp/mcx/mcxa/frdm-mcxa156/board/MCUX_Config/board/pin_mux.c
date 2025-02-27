@@ -84,6 +84,13 @@ void BOARD_InitPins(void)
     RESET_ReleasePeripheralReset(kGPIO2_RST_SHIFT_RSTn);
     RESET_ReleasePeripheralReset(kGPIO3_RST_SHIFT_RSTn);
 
+#ifdef BSP_USING_RTC
+    CLOCK_SetClockDiv(kCLOCK_DivLPTMR0, 1u);
+    CLOCK_AttachClk(kFRO12M_to_LPTMR0);
+
+    CLOCK_SetupFRO16KClocking(kCLKE_16K_SYSTEM | kCLKE_16K_COREMAIN);
+#endif
+
     /* Release LPUART0 resets */
     RESET_ReleasePeripheralReset(kLPUART0_RST_SHIFT_RSTn);
 
