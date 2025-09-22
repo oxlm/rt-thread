@@ -12,7 +12,7 @@
 #include <rtdevice.h>
 #include <drivers/hwtimer.h>
 
-#ifdef BSP_USING_HWTIMER
+#ifdef BSP_USING_TIM
 
 typedef struct {
     uint32_t reg_base;
@@ -28,46 +28,46 @@ typedef struct {
 } gd32_hwtimer_device;
 
 enum timer_index_E {
-#ifdef BSP_USING_HWTIMER0
+#ifdef BSP_USING_TIM0
     TIM0_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER1
+#ifdef BSP_USING_TIM1
     TIM1_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER2
+#ifdef BSP_USING_TIM2
     TIM2_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER3
+#ifdef BSP_USING_TIM3
     TIM3_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER4
+#ifdef BSP_USING_TIM4
     TIM4_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER5
+#ifdef BSP_USING_TIM5
     TIM5_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER6
+#ifdef BSP_USING_TIM6
     TIM6_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER7
+#ifdef BSP_USING_TIM7
     TIM7_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER8
+#ifdef BSP_USING_TIM8
     TIM8_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER9
+#ifdef BSP_USING_TIM9
     TIM9_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER10
+#ifdef BSP_USING_TIM10
     TIM10_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER11
+#ifdef BSP_USING_TIM11
     TIM11_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER12
+#ifdef BSP_USING_TIM12
     TIM12_INDEX,
 #endif
-#ifdef BSP_USING_HWTIMER13
+#ifdef BSP_USING_TIM13
     TIM13_INDEX,
 #endif
 };
@@ -195,7 +195,7 @@ static const struct rt_hwtimer_ops g_gd32_hwtimer_ops = {
 };
 
 static gd32_hwtimer_device g_gd32_hwtimer[] = {
-#ifdef BSP_USING_HWTIMER0
+#ifdef BSP_USING_TIM0
     {
         "timer0",
         {
@@ -212,7 +212,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER1
+#ifdef BSP_USING_TIM1
     {
         "timer1",
         {
@@ -229,7 +229,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER2
+#ifdef BSP_USING_TIM2
     {
         "timer2",
         {
@@ -246,7 +246,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER3
+#ifdef BSP_USING_TIM3
     {
         "timer3",
         {
@@ -263,7 +263,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER4
+#ifdef BSP_USING_TIM4
     {
         "timer4",
         {
@@ -280,12 +280,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER5
+#ifdef BSP_USING_TIM5
     {
         "timer5",
         {
              TIMER5,
-             TIMER5_IRQn,
+             TIMER5_DAC_IRQn,
              RCU_TIMER5,
         },
         {0},
@@ -297,7 +297,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER6
+#ifdef BSP_USING_TIM6
     {
         "timer6",
         {
@@ -314,7 +314,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER7
+#ifdef BSP_USING_TIM7
     {
         "timer7",
         {
@@ -331,13 +331,13 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER8
+#ifdef BSP_USING_TIM8
     {
         "timer8",
         {
-             TIMER8,
-             TIMER8_IRQn,
-             RCU_TIMER8,
+            TIMER8,
+            TIMER0_BRK_TIMER8_IRQn,
+            RCU_TIMER8,
         },
         {0},
         {
@@ -348,12 +348,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER9
+#ifdef BSP_USING_TIM9
     {
         "timer9",
         {
              TIMER9,
-             TIMER9_IRQn,
+             TIMER0_UP_TIMER9_IRQn,
              RCU_TIMER9,
         },
         {0},
@@ -365,12 +365,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER10
+#ifdef BSP_USING_TIM10
     {
         "timer10",
         {
              TIMER10,
-             TIMER10_IRQn,
+             TIMER0_TRG_CMT_TIMER10_IRQn,
              RCU_TIMER10,
         },
         {0},
@@ -382,12 +382,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER11
+#ifdef BSP_USING_TIM11
     {
         "timer11",
         {
              TIMER11,
-             TIMER11_IRQn,
+             TIMER7_BRK_TIMER11_IRQn,
              RCU_TIMER11,
         },
         {0},
@@ -399,12 +399,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER12
+#ifdef BSP_USING_TIM12
     {
         "timer12",
         {
              TIMER12,
-             TIMER12_IRQn,
+             TIMER7_UP_TIMER12_IRQn,
              RCU_TIMER12,
         },
         {0},
@@ -416,12 +416,12 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         }
     },
 #endif
-#ifdef BSP_USING_HWTIMER13
+#ifdef BSP_USING_TIM13
     {
         "timer13",
         {
              TIMER13,
-             TIMER13_IRQn,
+             TIMER7_TRG_CMT_TIMER13_IRQn,
              RCU_TIMER13,
         },
         {0},
@@ -435,7 +435,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
 #endif
 };
 
-#ifdef BSP_USING_HWTIMER0
+#ifdef BSP_USING_TIM0
 void TIMER0_UP_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -446,7 +446,7 @@ void TIMER0_UP_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER1
+#ifdef BSP_USING_TIM1
 void TIMER1_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -457,7 +457,7 @@ void TIMER1_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER2
+#ifdef BSP_USING_TIM2
 void TIMER2_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -468,7 +468,7 @@ void TIMER2_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER3
+#ifdef BSP_USING_TIM3
 void TIMER3_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -479,7 +479,7 @@ void TIMER3_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER4
+#ifdef BSP_USING_TIM4
 void TIMER4_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -490,7 +490,7 @@ void TIMER4_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER5
+#ifdef BSP_USING_TIM5
 void TIMER5_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -501,7 +501,7 @@ void TIMER5_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER6
+#ifdef BSP_USING_TIM6
 void TIMER6_IRQHandler(void)
 {
     rt_interrupt_enter();
@@ -512,7 +512,7 @@ void TIMER6_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_HWTIMER7
+#ifdef BSP_USING_TIM7
 void TIMER7_UP_IRQHandler(void)
 {
     rt_interrupt_enter();
