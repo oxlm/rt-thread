@@ -80,10 +80,10 @@ enum timer_index_E {
  * @param freq of the timer clock
  * @retval None
  */
-static void __set_timerx_freq(uint32_t timerx, uint32_t freq)
+static rt_err_t __set_timerx_freq(uint32_t timerx, uint32_t freq)
 {
     uint32_t ap1freq, ap2freq;
-    uint16_t prescaler;
+    uint32_t prescaler;
     uint32_t temp;
 
     if (timerx == TIMER0 || timerx == TIMER7 || timerx == TIMER8 \
@@ -95,7 +95,7 @@ static void __set_timerx_freq(uint32_t timerx, uint32_t freq)
         /* whether should frequency doubling */
         temp = (temp < 4) ? 0 : 1;
 
-        prescaler = (ap2freq << temp) / freq - 1;
+        prescaler = (ap2freq << temp) / freq;
     }
     else
     {
@@ -105,26 +105,21 @@ static void __set_timerx_freq(uint32_t timerx, uint32_t freq)
         /* whether should frequency doubling */
         temp = (temp < 4) ? 0 : 1;
 
-        prescaler = (ap1freq << temp) / freq - 1;
+        prescaler = (ap1freq << temp) / freq;
     }
 
-    timer_prescaler_config(timerx, prescaler, TIMER_PSC_RELOAD_NOW);
+    //rt_kprintf("prescaler %d\n", prescaler);
+    if(prescaler > 65536)
+        return -RT_EINVAL;
+
+    timer_interrupt_disable(timerx, TIMER_INT_UP);
+    timer_prescaler_config(timerx, (uint16_t)prescaler - 1, TIMER_PSC_RELOAD_NOW);
+    timer_interrupt_flag_clear(timerx, TIMER_INT_FLAG_UP);
+    timer_interrupt_enable(timerx, TIMER_INT_UP);
+
+    return RT_EOK;
 }
 
-static void gd32_hwtimer_init(struct rt_hwtimer_device *timer, rt_uint32_t state)
-{
-    uint32_t timer_base = (uint32_t)timer->parent.user_data;
-    timer_parameter_struct initpara;
-
-    if (state)
-    {
-        timer_internal_clock_config(timer_base);
-        timer_struct_para_init(&initpara);
-        initpara.period =  timer->info->maxcnt;
-        timer_init(timer_base, &initpara);
-        __set_timerx_freq(timer_base, timer->info->maxfreq);
-    }
-}
 
 static rt_err_t gd32_hwtimer_start(struct rt_hwtimer_device *timer, \
     rt_uint32_t cnt, rt_hwtimer_mode_t mode)
@@ -140,11 +135,35 @@ static rt_err_t gd32_hwtimer_start(struct rt_hwtimer_device *timer, \
         timer_single_pulse_mode_config(timer_base, TIMER_SP_MODE_REPETITIVE);
     }
 
+    timer_disable(timer_base);
     timer_counter_value_config(timer_base, 0);
-    timer_autoreload_value_config(timer_base, cnt - 1);
+    //rt_kprintf("cnt %d\n", cnt);
+    timer_autoreload_value_config(timer_base, (cnt  * 100)- 1);
+    timer_auto_reload_shadow_enable(timer_base);
     timer_enable(timer_base);
-
     return 0;
+}
+
+static void gd32_hwtimer_init(struct rt_hwtimer_device *timer, rt_uint32_t state)
+{
+    uint32_t timer_base = (uint32_t)timer->parent.user_data;
+    timer_parameter_struct initpara;
+
+    if (state)
+    {
+        timer_deinit(timer_base);
+        timer_interrupt_disable(timer_base, TIMER_INT_UP);
+        timer_interrupt_flag_clear(timer_base, TIMER_INT_FLAG_UP);
+        timer_internal_clock_config(timer_base);
+        timer_struct_para_init(&initpara);
+        initpara.period =  timer->info->maxcnt;
+        timer_init(timer_base, &initpara);
+        gd32_hwtimer_start(timer,  initpara.period, timer->mode);
+    }
+    else
+    {
+        timer_deinit(timer_base);
+    }
 }
 
 static void gd32_hwtimer_stop(struct rt_hwtimer_device *timer)
@@ -175,7 +194,7 @@ static rt_err_t gd32_hwtimer_control(struct rt_hwtimer_device *timer, rt_uint32_
     {
     case HWTIMER_CTRL_FREQ_SET:
         freq = *(rt_uint32_t *)args;
-        __set_timerx_freq((uint32_t)timer->parent.user_data, freq);
+        return __set_timerx_freq((uint32_t)timer->parent.user_data, freq);
         break;
     default:
         rt_kprintf("invalid cmd:%x\n", cmd);
@@ -206,8 +225,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -223,8 +242,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFFFFFF,
             0, /* count up mode  */
         }
     },
@@ -240,8 +259,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -257,8 +276,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -274,8 +293,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFFFFFF,
             0, /* count up mode  */
         }
     },
@@ -291,8 +310,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -308,8 +327,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -325,8 +344,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -342,8 +361,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -359,8 +378,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -376,8 +395,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -393,8 +412,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -410,8 +429,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -427,8 +446,8 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {0},
         {
             1000000,
-            1000,
-            0xffff,
+            1527,
+            0xFFFF,
             0, /* count up mode  */
         }
     },
@@ -438,10 +457,15 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
 #ifdef BSP_USING_TIM0
 void TIMER0_UP_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM0_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM0_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM0_INDEX].hwtimer_dev);
+  }
     rt_interrupt_leave();
 }
 #endif
@@ -449,10 +473,15 @@ void TIMER0_UP_IRQHandler(void)
 #ifdef BSP_USING_TIM1
 void TIMER1_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM1_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM1_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM1_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM1_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM1_INDEX].hwtimer_dev);
+  }
     rt_interrupt_leave();
 }
 #endif
@@ -460,10 +489,15 @@ void TIMER1_IRQHandler(void)
 #ifdef BSP_USING_TIM2
 void TIMER2_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM2_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM2_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM2_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM2_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM2_INDEX].hwtimer_dev);
+  }
     rt_interrupt_leave();
 }
 #endif
@@ -471,55 +505,79 @@ void TIMER2_IRQHandler(void)
 #ifdef BSP_USING_TIM3
 void TIMER3_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM3_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM3_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM3_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM3_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
-    rt_interrupt_leave();
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM3_INDEX].hwtimer_dev);
+  }
+  rt_interrupt_leave();
 }
 #endif
 
 #ifdef BSP_USING_TIM4
 void TIMER4_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM4_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM4_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM4_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM4_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
-    rt_interrupt_leave();
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM4_INDEX].hwtimer_dev);
+  }
+  rt_interrupt_leave();
 }
 #endif
 
 #ifdef BSP_USING_TIM5
 void TIMER5_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM5_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM5_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM5_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM5_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
-    rt_interrupt_leave();
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM5_INDEX].hwtimer_dev);
+  }
+  rt_interrupt_leave();
 }
 #endif
 
 #ifdef BSP_USING_TIM6
 void TIMER6_IRQHandler(void)
 {
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM6_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM6_INDEX].hwtimer_dev.parent.user_data, \
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM6_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM6_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
-    rt_interrupt_leave();
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM6_INDEX].hwtimer_dev);
+  }
+  rt_interrupt_leave();
 }
 #endif
 
 #ifdef BSP_USING_TIM7
-void TIMER7_UP_IRQHandler(void)
-{
-    rt_interrupt_enter();
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev);
-    timer_flag_clear((uint32_t)g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev.parent.user_data, \
+void TIMER7_UP_IRQHandler(void) {
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
         TIMER_INT_UP);
-    rt_interrupt_leave();
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev);
+  }
+  rt_interrupt_leave();
 }
 #endif
 
@@ -527,15 +585,15 @@ static int rt_hwtimer_init(void)
 {
     int ret = 0, i = 0;
 
+    //rcu_timer_clock_prescaler_config(RCU_TIMER_PSC_MUL2);
+
     for (; i < sizeof(g_gd32_hwtimer) / sizeof(g_gd32_hwtimer[0]); i++)
     {
         g_gd32_hwtimer[i].hwtimer_dev.ops = &g_gd32_hwtimer_ops;
         g_gd32_hwtimer[i].hwtimer_dev.info = &g_gd32_hwtimer[i].hwtimer_info;
 
         rcu_periph_clock_enable(g_gd32_hwtimer[i].hw_data.rcu);
-        NVIC_SetPriority(g_gd32_hwtimer[i].hw_data.irqn, 0);
-        NVIC_EnableIRQ(g_gd32_hwtimer[i].hw_data.irqn);
-        timer_interrupt_enable(g_gd32_hwtimer[i].hw_data.reg_base, TIMER_INT_UP);
+        nvic_irq_enable(g_gd32_hwtimer[i].hw_data.irqn, 1, 0);
         ret = rt_device_hwtimer_register(&g_gd32_hwtimer[i].hwtimer_dev, \
             g_gd32_hwtimer[i].dev_name, (void *)g_gd32_hwtimer[i].hw_data.reg_base);
         if (RT_EOK != ret)
