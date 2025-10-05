@@ -228,7 +228,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         "timer0",
         {
              TIMER0,
-             TIMER0_UP_IRQn,
+             TIMER0_UP_TIMER9_IRQn,
              RCU_TIMER0,
         },
         {0},
@@ -347,7 +347,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         "timer7",
         {
              TIMER7,
-             TIMER7_UP_IRQn,
+             TIMER7_UP_TIMER12_IRQn,
              RCU_TIMER7,
         },
         {0},
@@ -463,22 +463,6 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
 #endif
 };
 
-#ifdef BSP_USING_TIM0
-void TIMER0_UP_IRQHandler(void)
-{
-  rt_interrupt_enter();
-  if (timer_interrupt_flag_get(
-          (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
-          TIMER_INT_FLAG_UP) == SET) {
-    timer_flag_clear(
-        (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
-        TIMER_INT_UP);
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM0_INDEX].hwtimer_dev);
-  }
-    rt_interrupt_leave();
-}
-#endif
-
 #ifdef BSP_USING_TIM1
 void TIMER1_IRQHandler(void)
 {
@@ -575,21 +559,6 @@ void TIMER6_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_TIM7
-void TIMER7_UP_IRQHandler(void) {
-  rt_interrupt_enter();
-  if (timer_interrupt_flag_get(
-          (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
-          TIMER_INT_FLAG_UP) == SET) {
-    timer_flag_clear(
-        (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
-        TIMER_INT_UP);
-    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev);
-  }
-  rt_interrupt_leave();
-}
-#endif
-
 #ifdef BSP_USING_TIM8
 void TIMER0_BRK_TIMER8_IRQHandler(void)
 {
@@ -606,10 +575,23 @@ void TIMER0_BRK_TIMER8_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_TIM9
+#if defined(BSP_USING_TIM0) || defined(BSP_USING_TIM9)
 void TIMER0_UP_TIMER9_IRQHandler(void)
 {
   rt_interrupt_enter();
+   
+#ifdef BSP_USING_TIM0
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM0_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM0_INDEX].hwtimer_dev);
+  }
+#endif
+
+#ifdef BSP_USING_TIM9
   if (timer_interrupt_flag_get(
           (uint32_t)g_gd32_hwtimer[TIM9_INDEX].hw_data.reg_base,
           TIMER_INT_FLAG_UP) == SET) {
@@ -618,6 +600,8 @@ void TIMER0_UP_TIMER9_IRQHandler(void)
         TIMER_INT_UP);
     rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM9_INDEX].hwtimer_dev); 
    }
+#endif
+
    rt_interrupt_leave();
 }
 #endif
@@ -654,10 +638,23 @@ void TIMER7_BRK_TIMER11_IRQHandler(void)
 }
 #endif
 
-#ifdef BSP_USING_TIM12
+#if defined(BSP_USING_TIM7) || defined(BSP_USING_TIM12)
 void TIMER7_UP_TIMER12_IRQHandler(void)
 {
   rt_interrupt_enter();
+  
+#ifdef BSP_USING_TIM7
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM7_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev);
+  }
+#endif
+
+#ifdef BSP_USING_TIM12
   if (timer_interrupt_flag_get(
           (uint32_t)g_gd32_hwtimer[TIM12_INDEX].hw_data.reg_base,
           TIMER_INT_FLAG_UP) == SET) {
@@ -666,6 +663,8 @@ void TIMER7_UP_TIMER12_IRQHandler(void)
         TIMER_INT_UP);
     rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM12_INDEX].hwtimer_dev);
     }
+#endif
+
     rt_interrupt_leave();
 }
 #endif
