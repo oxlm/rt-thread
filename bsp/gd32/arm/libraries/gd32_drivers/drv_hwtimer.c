@@ -126,6 +126,12 @@ static rt_err_t gd32_hwtimer_start(struct rt_hwtimer_device *timer, \
 {
     uint32_t timer_base = (uint32_t)timer->parent.user_data;
 
+    //rt_kprintf("cnt %d\n", cnt);
+    if(((timer_base == TIMER1) || (timer_base == TIMER4)) && (cnt > 42979672))
+    {
+        return -RT_EINVAL;
+    }
+
     if (mode == HWTIMER_MODE_ONESHOT)
     {
         timer_single_pulse_mode_config(timer_base, TIMER_SP_MODE_SINGLE);
@@ -137,11 +143,14 @@ static rt_err_t gd32_hwtimer_start(struct rt_hwtimer_device *timer, \
 
     timer_disable(timer_base);
     timer_counter_value_config(timer_base, 0);
-    //rt_kprintf("cnt %d\n", cnt);
-    timer_autoreload_value_config(timer_base, (cnt  * 100)- 1);
+    if((timer_base == TIMER1) || (timer_base == TIMER4)) {
+        timer_autoreload_value_config(timer_base, (cnt * 100) - 1);
+    } else {
+        timer_autoreload_value_config(timer_base, cnt - 1);
+    }
     timer_auto_reload_shadow_enable(timer_base);
     timer_enable(timer_base);
-    return 0;
+    return RT_EOK;
 }
 
 static void gd32_hwtimer_init(struct rt_hwtimer_device *timer, rt_uint32_t state)
@@ -243,7 +252,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {
             1000000,
             1527,
-            0xFFFFFFFF,
+            42979672, // (0xFFFFFFFF + 1) / 100
             0, /* count up mode  */
         }
     },
@@ -294,7 +303,7 @@ static gd32_hwtimer_device g_gd32_hwtimer[] = {
         {
             1000000,
             1527,
-            0xFFFFFFFF,
+            0xFFFF,
             0, /* count up mode  */
         }
     },

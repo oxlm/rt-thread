@@ -36,10 +36,15 @@ int hw_timer_test(int argc, char **argv)
     for (new_freq = 1000; new_freq <= 1000000; new_freq *= 10) {
         if (rt_device_control(d_timer, HWTIMER_CTRL_FREQ_SET, &new_freq) == RT_EOK) {
             rt_kprintf("set freq %d Hz success\n", new_freq);
+
             timeout_s.sec  = 5; /* 秒 */
             timeout_s.usec = 0; /* 微秒 */
-            rt_device_write(d_timer, 0, &timeout_s, sizeof(timeout_s));
+            if (rt_device_write(d_timer, 0, &timeout_s, sizeof(timeout_s)) != sizeof(timeout_s)) {
+                rt_kprintf("set timeout 5s failed!\n");
+                continue;
+            }
 
+            rt_kprintf("wait 2 seconds...\n");
             rt_thread_mdelay(2000);
 
             /* 读取定时器当前值 */
