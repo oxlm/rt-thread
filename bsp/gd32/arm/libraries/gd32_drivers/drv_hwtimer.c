@@ -544,7 +544,7 @@ void TIMER4_IRQHandler(void)
 #endif
 
 #ifdef BSP_USING_TIM5
-void TIMER5_IRQHandler(void)
+void TIMER5_DAC_IRQHandler(void)
 {
   rt_interrupt_enter();
   if (timer_interrupt_flag_get(
@@ -587,6 +587,102 @@ void TIMER7_UP_IRQHandler(void) {
     rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM7_INDEX].hwtimer_dev);
   }
   rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM8
+void TIMER0_BRK_TIMER8_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM8_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM8_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM8_INDEX].hwtimer_dev);
+    }
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM9
+void TIMER0_UP_TIMER9_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM9_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM9_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM9_INDEX].hwtimer_dev); 
+   }
+   rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM10
+void TIMER0_TRG_CMT_TIMER10_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM10_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM10_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM10_INDEX].hwtimer_dev);
+    }
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM11
+void TIMER7_BRK_TIMER11_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM11_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM11_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM11_INDEX].hwtimer_dev);
+    }
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM12
+void TIMER7_UP_TIMER12_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM12_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM12_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM12_INDEX].hwtimer_dev);
+    }
+    rt_interrupt_leave();
+}
+#endif
+
+#ifdef BSP_USING_TIM13
+void TIMER7_TRG_CMT_TIMER13_IRQHandler(void)
+{
+  rt_interrupt_enter();
+  if (timer_interrupt_flag_get(
+          (uint32_t)g_gd32_hwtimer[TIM13_INDEX].hw_data.reg_base,
+          TIMER_INT_FLAG_UP) == SET) {
+    timer_flag_clear(
+        (uint32_t)g_gd32_hwtimer[TIM13_INDEX].hw_data.reg_base,
+        TIMER_INT_UP);
+    rt_device_hwtimer_isr(&g_gd32_hwtimer[TIM13_INDEX].hwtimer_dev);
+    }
+    rt_interrupt_leave();
 }
 #endif
 
