@@ -15,7 +15,9 @@ path = [
     os.path.join(cwd, '..', 'libraries', 'HAL_Drivers', 'drivers'),
 ]
 
-group = DefineGroup('Drivers', src, depend = [''], CPPPATH = path)
+cppdefines = ['NS800RT7P65X', 'USE_HAL_DRIVER']
+
+group = DefineGroup('Drivers', src, depend = [''], CPPPATH = path, CPPDEFINES = cppdefines)
 list = os.listdir(cwd)
 for item in list:
     if os.path.isfile(os.path.join(cwd, item, 'SConscript')):
