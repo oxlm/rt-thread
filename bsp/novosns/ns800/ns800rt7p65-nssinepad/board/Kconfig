@@ -128,7 +128,7 @@ menu "On-chip Peripheral Drivers"
 		select RT_USING_CLOCK_TIME
 		default n
 		help
-			Enable hardware timer (TIM/BTIM/STIM/LPTIM) driver
+			Enable hardware timer TIM driver
 
 	if BSP_USING_TIM
     menu "TIM Timer Configuration"
