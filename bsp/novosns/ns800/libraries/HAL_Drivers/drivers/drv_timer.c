@@ -12,6 +12,10 @@
 
 #ifdef BSP_USING_TIM
 
+#define DRV_DEBUG
+#define LOG_TAG             "drv.timer"
+#include <drv_log.h>
+
 struct ns800_clock_timer
 {
     rt_clock_timer_t        timer;
@@ -102,7 +106,7 @@ static void ns800_clock_timer_init(rt_clock_timer_t *timer, rt_uint32_t state)
     else
     {
         TIM_disableInterruptSource(htim, TIM_IT_UPDATE);
-        TIM_disableCounter(htim, TIM_FLAG_UPDATE);
+        TIM_disableCounter(htim);
     }
 }
 
@@ -205,6 +209,8 @@ static const struct rt_clock_timer_ops ns800_clock_timer_ops =
 
 int rt_hw_clock_timer_init(void)
 {
+    rt_err_t ret = RT_EOK;
+
     if (NS800_TIMER_NUM == 0)
         return RT_EOK;
 
@@ -216,18 +222,16 @@ int rt_hw_clock_timer_init(void)
         ns800_timers[i].timer.info = &ns800_clock_timer_info[i];
         ns800_timers[i].timer.ops  = &ns800_clock_timer_ops;
 
-        rt_clock_timer_register(&ns800_timers[i].timer,
+        ret = rt_clock_timer_register(&ns800_timers[i].timer,
                                ns800_timers[i].name,
                                &ns800_timers[i]);
 
-        if (ns800_timers[i].irqno != last_irq)
+        if ((ret == RT_EOK) && (ns800_timers[i].irqno != last_irq))
         {
             Interrupt_register(ns800_timers[i].irqno, ns800_timers[i].irq_handler);
             Interrupt_enable(ns800_timers[i].irqno);
             last_irq = ns800_timers[i].irqno;
         }
-
-        rt_kprintf("[%s] register ok\n", ns800_timers[i].name);
     }
 
     return RT_EOK;
