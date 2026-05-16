@@ -84,17 +84,26 @@ void TIM2_IRQHandler(void) { ns800_clock_timer_isr(&ns800_timers[TIM2_INDEX]); }
 static void ns800_clock_timer_init(rt_clock_timer_t *timer, rt_uint32_t state)
 {
     struct ns800_clock_timer *tim = (struct ns800_clock_timer *)timer->parent.user_data;
+    TIM_TypeDef *htim = (TIM_TypeDef *)tim->instance;
 
-    __IO uint32_t cfg =
-        TIM_PWMMODE_ONEPOINT |
-        TIM_CLOCKDIVISION_DIV1 |
-        TIM_AUTORELOADPRELOAD_ENABLE |
-        TIM_COUNTERMODE_UP |
-        TIM_ONEPULSEMODE_REPETITIVE;
+    if(state)
+    {
+        __IO uint32_t cfg =
+            TIM_PWMMODE_ONEPOINT |
+            TIM_CLOCKDIVISION_DIV1 |
+            TIM_AUTORELOADPRELOAD_ENABLE |
+            TIM_COUNTERMODE_UP |
+            TIM_ONEPULSEMODE_REPETITIVE;
 
-    TIM_configTimeBase((TIM_TypeDef *)tim->instance, 200-1, 100-1, cfg);
-    TIM_clearFlags((TIM_TypeDef *)tim->instance, TIM_FLAG_UPDATE);
-    TIM_enableInterruptSource((TIM_TypeDef *)tim->instance, TIM_IT_UPDATE);
+        TIM_configTimeBase(htim, 200-1, 100-1, cfg);
+        TIM_clearFlags(htim, TIM_FLAG_UPDATE);
+        TIM_enableInterruptSource(htim, TIM_IT_UPDATE);
+    }
+    else
+    {
+        TIM_disableInterruptSource(htim, TIM_IT_UPDATE);
+        TIM_disableCounter(htim, TIM_FLAG_UPDATE);
+    }
 }
 
 static rt_err_t ns800_clock_timer_start(rt_clock_timer_t *timer, rt_uint32_t cnt, rt_clock_timer_mode_t mode)
@@ -146,7 +155,6 @@ static rt_err_t ns800_clock_timer_control(rt_clock_timer_t *timer, rt_uint32_t c
         case CLOCK_TIMER_CTRL_FREQ_SET:
             freq = *(rt_uint32_t *)args;
             __set_timerx_freq(timer, freq);
-             break;
             break;
         case CLOCK_TIMER_CTRL_INFO_GET:
             *(struct rt_clock_timer_info*)args = *timer->info;
