@@ -168,16 +168,16 @@ static const struct rt_clock_timer_info ns800_clock_timer_info[] =
 {
 #ifdef BSP_USING_TIM1
     {
-        .maxfreq = 1000000UL,
-        .minfreq = 1000UL,
+        .maxfreq = 200000000UL,
+        .minfreq = 1UL,
         .maxcnt  = 0xFFFF,
         .cntmode = CLOCK_TIMER_CNTMODE_UP,
     },
 #endif
 #ifdef BSP_USING_TIM2
     {
-        .maxfreq = 1000000UL,
-        .minfreq = 1000UL,
+        .maxfreq = 200000000UL,
+        .minfreq = 1UL,
         .maxcnt  = 0xFFFF,
         .cntmode = CLOCK_TIMER_CNTMODE_UP,
     },
