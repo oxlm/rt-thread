@@ -167,6 +167,14 @@
 #define RT_SERIAL_RB_BUFSZ 64
 #define RT_USING_CLOCK_TIME
 #define RT_USING_PIN
+#define RT_USING_CHERRYUSB
+#define RT_CHERRYUSB_DEVICE
+#define RT_CHERRYUSB_DEVICE_SPEED_FS
+#define RT_CHERRYUSB_DEVICE_KINETIS_MCX
+#define RT_CHERRYUSB_DEVICE_MSC
+#define CONFIG_USBDEV_REQUEST_BUFFER_LEN 512
+#define CONFIG_USBDEV_MSC_MAX_BUFSIZE 512
+#define RT_CHERRYUSB_DEVICE_TEMPLATE_MSC
 /* end of Device Drivers */
 
 /* C/C++ and POSIX layer */
@@ -361,6 +369,10 @@
 /* FT32 HAL & SDK Drivers */
 
 /* end of FT32 HAL & SDK Drivers */
+
+/* NOVOSNS Drivers */
+
+/* end of NOVOSNS Drivers */
 /* end of HAL & SDK Drivers */
 
 /* sensors drivers */
@@ -453,6 +465,8 @@
 #define BSP_USING_UART5
 #define BSP_USING_UART2
 #define BSP_USING_CLOCK_TIMER
+#define BSP_USING_USB
+#define BSP_USING_USB_DEVICE
 /* end of On-chip Peripheral Drivers */
 
 /* Board extended module Drivers */
