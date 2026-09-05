@@ -26,6 +26,17 @@ int cherryusb_devinit(void)
 INIT_COMPONENT_EXPORT(cherryusb_devinit);
 #endif
 
+#if defined(RT_CHERRYUSB_DEVICE_TEMPLATE_NONE) && defined(RT_CHERRYUSB_DEVICE_AUDIO)
+int cherryusb_devinit(void)
+{
+    extern void usb_adc_mic_init(uint8_t busid, uintptr_t reg_base);
+
+    usb_adc_mic_init(0, USBHS1__USBC_BASE);
+    return 0;
+}
+INIT_COMPONENT_EXPORT(cherryusb_devinit);
+#endif
+
 #ifdef RT_CHERRYUSB_DEVICE_TEMPLATE_MSC
 int cherryusb_devinit(void)
 {

@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--target=arm-arm-none-eabi</MiscControls>
-              <Define>__RTTHREAD__, __STDC_LIMIT_MACROS, __CLK_TCK=RT_TICK_PER_SECOND, RT_USING_ARMLIBC, CPU_MCXN947VDF_cm33_core0, DEBUG, RT_USING_LIBC</Define>
+              <Define>CPU_MCXN947VDF_cm33_core0, RT_USING_LIBC, __STDC_LIMIT_MACROS, __RTTHREAD__, __CLK_TCK=RT_TICK_PER_SECOND, DEBUG, RT_USING_ARMLIBC</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\..\..\..\components\net\utest;board\MCUX_Config\board;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\net;..\..\..\..\..\libcpu\arm\cortex-m33;..\..\..\..\..\components\drivers\include;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\runbootloader;..\..\..\..\..\components\drivers\usb\cherryusb\class\hid;..\..\..\..\..\components\libc\compilers\common\extension\fcntl\octal;.;..\..\..\..\..\components\libc\compilers\common\extension;..\..\..\..\..\components\drivers\usb\cherryusb;..\..\..\..\..\components\drivers\usb\cherryusb\class\audio;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\display;..\..\..\..\..\libcpu\arm\common;packages\nxp-mcx-series-latest\MCXN947;packages\nxp-mcx-series-latest\MCXN947\drivers;applications;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\wifi;..\..\..\..\..\components\drivers\usb\cherryusb\class\midi;..\..\..\..\..\components\finsh;..\libraries\drivers;..\..\..\..\..\components\libc\compilers\common\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\msc;..\..\..\..\..\components\libc\posix\io\eventfd;packages\nxp-mcx-cmsis-latest\Core\Include;..\..\..\..\..\include;..\..\..\..\..\components\utilities\ulog;..\..\..\..\..\components\drivers\usb\cherryusb\class\wireless;..\libraries\drivers\config;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\core;..\..\..\..\..\components\drivers\usb\cherryusb\class\cdc;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\common;..\..\..\..\..\components\drivers\clock_time;..\..\..\..\..\components\drivers\usb\cherryusb\class\video;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\mem_interface;..\..\..\..\..\components\drivers\usb\cherryusb\class\hub;..\..\..\..\..\components\libc\posix\io\epoll;..\..\..\..\..\components\drivers\usb\cherryusb\osal;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\flash;..\..\..\..\..\components\drivers\smp_call;board;..\..\..\..\..\components\drivers\usb\cherryusb\class\adb;..\..\..\..\..\components\libc\posix\io\poll;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\port\chipidea;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\xbox;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\dfu;..\..\..\..\..\components\libc\posix\ipc;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\nboot;..\..\..\..\..\components\drivers\usb\cherryusb\class\serial;..\..\..\..\..\components\drivers\include</IncludePath>
+              <IncludePath>board\MCUX_Config\board;..\..\..\..\..\components\drivers\include;packages\nxp-mcx-cmsis-latest\Core\Include;..\..\..\..\..\components\drivers\usb\cherryusb\core;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\xbox;..\..\..\..\..\libcpu\arm\common;..\..\..\..\..\components\net\utest;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\nboot;..\..\..\..\..\components\drivers\usb\cherryusb\class\hub;..\..\..\..\..\components\drivers\usb\cherryusb\class\msc;..\..\..\..\..\components\drivers\include;..\..\..\..\..\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\adb;..\..\..\..\..\components\utilities\ulog;..\..\..\..\..\components\drivers\usb\cherryusb\class\midi;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\net;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\libc\compilers\common\extension;..\..\..\..\..\components\drivers\usb\cherryusb\port\chipidea;..\..\..\..\..\components\drivers\clock_time;..\..\..\..\..\components\drivers\usb\cherryusb\common;packages\nxp-mcx-series-latest\MCXN947\drivers;..\..\..\..\..\components\libc\compilers\common\extension\fcntl\octal;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\wifi;..\..\..\..\..\components\drivers\usb\cherryusb\osal;.;..\..\..\..\..\components\drivers\usb\cherryusb\class\video;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\runbootloader;..\..\..\..\..\components\drivers\include;board;..\..\..\..\..\components\libc\posix\io\eventfd;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\mem_interface;..\..\..\..\..\components\finsh;..\..\..\..\..\libcpu\arm\cortex-m33;..\..\..\..\..\components\libc\posix\ipc;..\..\..\..\..\components\drivers\usb\cherryusb;..\libraries\drivers\config;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\libc\posix\io\poll;..\..\..\..\..\components\drivers\usb\cherryusb\class\dfu;..\..\..\..\..\components\drivers\usb\cherryusb\class\cdc;..\..\..\..\..\components\drivers\smp_call;packages\nxp-mcx-series-latest\MCXN947;..\libraries\drivers;..\..\..\..\..\components\drivers\usb\cherryusb\class\hid;..\..\..\..\..\components\drivers\usb\cherryusb\class\serial;..\..\..\..\..\components\libc\posix\io\epoll;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\display;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\flash;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\audio;applications;..\..\..\..\..\components\drivers\usb\cherryusb\class\wireless;..\..\..\..\..\components\libc\compilers\common\include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -388,6 +388,11 @@
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>applications\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>usb_adc_mic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>applications\usb_adc_mic.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -1674,7 +1679,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath></IncludePath>
+                      <IncludePath> </IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2819,11 +2824,6 @@
               <FileName>usbd_audio.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\components\drivers\usb\cherryusb\class\audio\usbd_audio.c</FilePath>
-            </File>
-            <File>
-              <FileName>audio_v2_mic_speaker_multichan_template.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\components\drivers\usb\cherryusb\demo\audio_v2_mic_speaker_multichan_template.c</FilePath>
             </File>
             <File>
               <FileName>rt_usb_msh.c</FileName>
