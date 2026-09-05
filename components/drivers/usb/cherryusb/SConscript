@@ -163,6 +163,8 @@ if GetDepend(['RT_CHERRYUSB_DEVICE']):
         src += Glob('demo/video_static_mjpeg_template.c')
     if GetDepend(['RT_CHERRYUSB_DEVICE_TEMPLATE_AUDIO_V1_MIC_SPEAKER']):
         src += Glob('demo/audio_v1_mic_speaker_multichan_template.c')
+    if GetDepend(['RT_CHERRYUSB_DEVICE_TEMPLATE_AUDIO_V2_MIC']):
+        src += Glob('demo/audio_v2_mic_multichan_template.c')
     if GetDepend(['RT_CHERRYUSB_DEVICE_TEMPLATE_AUDIO_V2_MIC_SPEAKER']):
         src += Glob('demo/audio_v2_mic_speaker_multichan_template.c')
     if GetDepend(['RT_CHERRYUSB_DEVICE_TEMPLATE_CDC_RNDIS']):

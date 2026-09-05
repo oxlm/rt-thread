@@ -128,7 +128,72 @@
           <Name>UL2V8M(-S0 -C0 -P0 -FD20000000 -FC1000 -FN4 -FF0MCXN9XX_2048 -FS00 -FL0200000 -FF1MCXN9XX_2048_S -FS110000000 -FL1200000 -FF2MCXN9XX_W25Q64 -FS280000000 -FL2800000 -FF3MCXN9XX_W25Q64_S -FS390000000 -FL3800000 -FP0($$Device:MCXN947VDF$devices\MCXN947\arm\MCXN9XX_2048.FLM) -FP1($$Device:MCXN947VDF$devices\MCXN947\arm\MCXN9XX_2048_S.FLM) -FP2($$Device:MCXN947VDF$devices\MCXN947\arm\MCXN9XX_W25Q64.FLM) -FP3($$Device:MCXN947VDF$devices\MCXN947\arm\MCXN9XX_W25Q64_S.FLM))</Name>
         </SetRegEntry>
       </TargetDriverDllRegistry>
-      <Breakpoint/>
+      <Breakpoint>
+        <Bp>
+          <Number>0</Number>
+          <Type>0</Type>
+          <LineNumber>68</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>0</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>applications\main.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
+        </Bp>
+        <Bp>
+          <Number>1</Number>
+          <Type>0</Type>
+          <LineNumber>43</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>0</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>..\libraries\drivers\drv_uart.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
+        </Bp>
+        <Bp>
+          <Number>2</Number>
+          <Type>0</Type>
+          <LineNumber>52</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>0</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>..\libraries\drivers\drv_uart.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
+        </Bp>
+        <Bp>
+          <Number>3</Number>
+          <Type>0</Type>
+          <LineNumber>61</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>0</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>..\libraries\drivers\drv_uart.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression></Expression>
+        </Bp>
+      </Breakpoint>
       <Tracepoint>
         <THDelay>0</THDelay>
       </Tracepoint>
@@ -2202,8 +2267,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\..\..\components\drivers\usb\cherryusb\class\msc\usbd_msc.c</PathWithFileName>
-      <FilenameWithoutPath>usbd_msc.c</FilenameWithoutPath>
+      <PathWithFileName>..\..\..\..\..\components\drivers\usb\cherryusb\class\audio\usbd_audio.c</PathWithFileName>
+      <FilenameWithoutPath>usbd_audio.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -2214,8 +2279,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\..\..\..\..\components\drivers\usb\cherryusb\demo\msc_ram_template.c</PathWithFileName>
-      <FilenameWithoutPath>msc_ram_template.c</FilenameWithoutPath>
+      <PathWithFileName>..\..\..\..\..\components\drivers\usb\cherryusb\demo\audio_v2_mic_speaker_multichan_template.c</PathWithFileName>
+      <FilenameWithoutPath>audio_v2_mic_speaker_multichan_template.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

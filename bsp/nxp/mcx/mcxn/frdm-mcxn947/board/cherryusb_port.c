@@ -14,6 +14,18 @@
 
 /* low level deinit here, this has implemented in cherryusb */
 
+
+#ifdef RT_CHERRYUSB_DEVICE_TEMPLATE_AUDIO_V2_MIC_SPEAKER
+int cherryusb_devinit(void)
+{
+    extern void audio_v2_init(uint8_t busid, uintptr_t reg_base);
+
+    audio_v2_init(0, USBHS1__USBC_BASE);
+    return 0;
+}
+INIT_COMPONENT_EXPORT(cherryusb_devinit);
+#endif
+
 #ifdef RT_CHERRYUSB_DEVICE_TEMPLATE_MSC
 int cherryusb_devinit(void)
 {
