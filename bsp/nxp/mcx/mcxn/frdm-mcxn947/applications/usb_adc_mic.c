@@ -502,6 +502,10 @@ static void usb_adc_mic_prepare_dma_ring(edma_handle_t *handle,
     }
 }
 
+/* Only reachable from usb_adc_mic_start_stream()'s #if !USB_ADC_MIC_USE_TEST_TONE
+ * block, so wrap the definition to match - otherwise armcc warns about an unused
+ * static function. */
+#if !USB_ADC_MIC_USE_TEST_TONE
 static bool usb_adc_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_config_t *transfer)
 {
     status_t status;
@@ -518,6 +522,7 @@ static bool usb_adc_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_conf
 
     return true;
 }
+#endif
 
 static void usb_adc_mic_init_opamp(OPAMP_Type *base)
 {
@@ -914,6 +919,13 @@ void usbd_audio_open(uint8_t busid, uint8_t intf)
     if (usb_adc_mic_start_stream())
     {
         USB_LOG_RAW("ADC MIC OPEN\r\n");
+        /* PORTSC1's PSPD is only set by the HS chirp, which has certainly
+         * happened by the time the host sends SET_INTERFACE - printing it at
+         * component-init time just reports the reset value 0x00, which this
+         * port maps to full speed. USB_SPEED_LOW=1, FULL=2, HIGH=3 (usb_def.h).
+         * Expect 3: a 2 (full speed) would make EP_INTERVAL 0x03 mean 3 ms of
+         * interval for 1 ms of audio. */
+        USB_LOG_RAW("ADC MIC port speed: %u\r\n", (unsigned)usbd_get_port_speed(busid));
         usb_adc_mic_kick_tx();
     }
     else
@@ -1066,12 +1078,6 @@ void usb_adc_mic_init(uint8_t busid, uintptr_t reg_base)
     usbd_add_interface(busid, usbd_audio_init_intf(busid, &intf1, 0x0200, audio_entity_table, 2));
     usbd_add_endpoint(busid, &audio_in_ep);
     usbd_initialize(busid, reg_base, usbd_event_handler);
-
-    /* USB_SPEED_LOW=1, FULL=2, HIGH=3 (usb_def.h). PORTSC1's PSPD is only
-     * meaningful after the HS chirp completes, so it must be read here rather
-     * than in usb_dc_low_level_init(). Expect 3; a value of 2 (full speed)
-     * would make EP_INTERVAL 0x03 mean 3 ms of interval for 1 ms of audio. */
-    USB_LOG_RAW("ADC MIC port speed: %u\r\n", (unsigned)usbd_get_port_speed(busid));
 }
 
 #endif
