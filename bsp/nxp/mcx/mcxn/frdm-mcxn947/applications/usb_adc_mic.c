@@ -35,10 +35,12 @@
 #define USBD_LANGID_STRING 1033
 
 #ifdef CONFIG_USB_HS
-/* HS: bInterval is log2(microframes of 125us). 2^3 = 8 microframes = 1 ms,
- * matching the 16 samples per 96-byte packet. 0x04 would mean 2 ms per
- * 1 ms of audio. */
-#define EP_INTERVAL 0x03
+/* HS isochronous: microframes = 2^(bInterval - 1), i.e. bInterval = log2(microframes) + 1.
+ * 2^3 = 8 microframes = 1 ms matches the 16 samples per 96-byte packet, so 0x04.
+ * 0x03 is 2^2 = 4 microframes = 500 us: the host polled twice per ms, so the
+ * ring's 1000 blocks/s could not feed 2000 packets/s and every second packet
+ * was zero-filled (see "micstat": submitted=done=2000, underrun=1000). */
+#define EP_INTERVAL 0x04
 #else
 #define EP_INTERVAL 0x01
 #endif
@@ -57,25 +59,47 @@
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
 
 #ifndef USB_ADC_MIC_USE_TEST_TONE
-#define USB_ADC_MIC_USE_TEST_TONE 1
+#define USB_ADC_MIC_USE_TEST_TONE 0
 #endif
 
 #if USB_ADC_MIC_USE_TEST_TONE
-#define USB_ADC_MIC_TEST_TONE_HZ         997U
-/* sine_32pt[] below is a literal table with exactly 32 entries, so its dimension
- * must stay 32, and PHASE_SHIFT must stay 32 - log2(32) = 27: index is
- * (phase >> PHASE_SHIFT) out of a 32-bit phase, so a larger shift would only
- * ever address the table's upper indices 0..15.
+/* One tone per channel, so a mix-up between the three channels shows up as a
+ * line at the wrong frequency instead of three identical traces. */
+#define USB_ADC_MIC_TEST_TONE_HZ0        1000U
+#define USB_ADC_MIC_TEST_TONE_HZ1        2000U
+#define USB_ADC_MIC_TEST_TONE_HZ2        3000U
+/* sine_16pt[] is one period of a tone sampled at the audio rate, so it can
+ * serve any of the three frequencies: 1 kHz at 16 kHz is 16 samples per
+ * period, so TABLE_SIZE is 16 and the 1 kHz step lands exactly on 2^28 (one
+ * table point per output sample). 2 kHz and 3 kHz reuse the same table with a
+ * faster step (2 and 3 table points per sample), which is why the table must
+ * stay "one period" rather than "1 kHz samples".
  *
- * Deriving both from a "TABLE_BITS" shift used to work only by accident: at
- * TABLE_BITS=4 the array became 16 elements while still holding 32
- * initializers (a C constraint violation) and the compiler kept just the
- * positive half-cycle, which is why TABLE_BITS=4 produced a rectified
- * unipolar pulse instead of a sine wave. */
-#define USB_ADC_MIC_TEST_TONE_TABLE_SIZE  32U
-#define USB_ADC_MIC_TEST_TONE_PHASE_SHIFT 27U
-#define USB_ADC_MIC_TEST_TONE_PHASE_STEP \
-    ((uint32_t)(((uint64_t)USB_ADC_MIC_TEST_TONE_HZ << 32) / USB_ADC_MIC_SAMPLE_RATE))
+ * PHASE_SHIFT must stay 32 - log2(TABLE_SIZE) = 28: index is (phase >>
+ * PHASE_SHIFT) out of a 32-bit phase, so a smaller shift would wrap the index
+ * around and a larger one would only ever address the table's upper half.
+ *
+ * HZ * TABLE_SIZE must be a multiple of SAMPLE_RATE (enforced below), i.e. the
+ * index must advance by a whole number of table points each sample. If it does
+ * not, the index sequence stops being periodic and the tone picks up a comb of
+ * sidebands around the fundamental: 997 Hz gave lines every ~96 Hz up to 3% of
+ * the fundamental because 997 * 32 / 16000 = 1.994 instead of an integer. */
+#define USB_ADC_MIC_TEST_TONE_TABLE_SIZE  16U
+#define USB_ADC_MIC_TEST_TONE_PHASE_SHIFT 28U
+#define USB_ADC_MIC_TEST_TONE_PHASE_STEP(hz) \
+    ((uint32_t)(((uint64_t)(hz) << 32) / USB_ADC_MIC_SAMPLE_RATE))
+#define USB_ADC_MIC_TEST_TONE_ADVANCE_OK(hz) \
+    (((hz) * USB_ADC_MIC_TEST_TONE_TABLE_SIZE) % USB_ADC_MIC_SAMPLE_RATE == 0)
+
+#if !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ0) || \
+    !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ1) || \
+    !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ2)
+#error "test tone: each HZ * TABLE_SIZE must be a multiple of SAMPLE_RATE, or the tone gets harmonic sidebands"
+#endif
+
+#if USB_ADC_MIC_CHANNELS > 3
+#error "test tone steps are defined for 3 channels only"
+#endif
 #endif
 
 #define USB_ADC_MIC_DMA_BLOCKS 8U
@@ -199,7 +223,14 @@ static volatile uint32_t s_usb_underruns;
 static volatile bool s_usb_mute_state[USB_ADC_MIC_CHANNELS + 1U];
 static volatile int s_usb_volume_db[USB_ADC_MIC_CHANNELS + 1U];
 #if USB_ADC_MIC_USE_TEST_TONE
-static uint32_t s_test_tone_phase;
+static uint32_t s_test_tone_phase[USB_ADC_MIC_CHANNELS];
+
+static const uint32_t s_test_tone_step[USB_ADC_MIC_CHANNELS] =
+{
+    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ0),
+    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ1),
+    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ2)
+};
 #endif
 
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_usb_tx_buffer[USB_ADC_MIC_PACKET_BYTES];
@@ -672,6 +703,41 @@ static void usb_adc_mic_config_adc1(void)
 
 static void usb_adc_mic_config_ctimer(void)
 {
+#if 1
+
+    ctimer_config_t timer_config;
+    ctimer_match_config_t match_config;
+    uint32_t timer_clk;
+    uint32_t periodTicks;
+
+    CTIMER_GetDefaultConfig(&timer_config);
+    CTIMER_Init(CTIMER0, &timer_config);
+
+    timer_clk = CLOCK_GetCTimerClkFreq(0U);
+    if ((timer_clk == 0U) || ((timer_clk % (USB_ADC_MIC_CTIMER_MATCH_RATE * 2U)) != 0U))
+    {
+        return;
+    }
+
+    /* M3 is configured for kCTIMER_Output_Toggle, so the output flips every
+     * periodTicks; the LPADC hardware trigger only looks at rising edges, so the
+     * effective trigger interval is 2 x periodTicks. Use half a sample period so
+     * the rising edges land on 1 / sample rate. */
+    periodTicks = timer_clk / (USB_ADC_MIC_CTIMER_MATCH_RATE * 2U);
+    if (periodTicks < 2U)
+    {
+        return;
+    }
+
+    match_config.matchValue = periodTicks - 1U;
+    match_config.enableCounterReset = true;
+    match_config.enableCounterStop = false;
+    match_config.outControl = kCTIMER_Output_Toggle;
+    match_config.outPinInitState = false;
+    match_config.enableInterrupt = false;
+
+    CTIMER_SetupMatch(CTIMER0, kCTIMER_Match_3, &match_config);
+#else
     ctimer_config_t timer_config;
     ctimer_match_config_t match_config;
     uint32_t timer_clk;
@@ -691,6 +757,7 @@ static void usb_adc_mic_config_ctimer(void)
     match_config.outPinInitState = false;
     match_config.enableInterrupt = false;
     CTIMER_SetupMatch(CTIMER0, kCTIMER_Match_3, &match_config);
+#endif
 }
 
 static void usb_adc_mic_hw_init(void)
@@ -753,14 +820,17 @@ static bool usb_adc_mic_start_stream(void)
     usb_adc_mic_ring_reset();
     memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
 #if USB_ADC_MIC_USE_TEST_TONE
-    s_test_tone_phase = 0U;
+    for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
+    {
+        s_test_tone_phase[ch] = 0U;
+    }
 #endif
 
     LPADC_DoResetFIFO0(ADC0);
     LPADC_DoResetFIFO0(ADC1);
     LPADC_DoResetFIFO1(ADC1);
 
-/* In test tone mode the samples come from sine_32pt[] straight into
+/* In test tone mode the samples come from sine_16pt[] straight into
  * s_usb_tx_buffer, so nothing reads the ADC DMA destination buffers. The three
  * EDMA_SubmitLoopTransfer() calls must not be allowed to veto streaming: each
  * was one failure that killed the whole stream.
@@ -814,26 +884,22 @@ static void usb_adc_mic_stop_stream(void)
 }
 
 #if USB_ADC_MIC_USE_TEST_TONE
-static const int16_t sine_32pt[USB_ADC_MIC_TEST_TONE_TABLE_SIZE] =
+static const int16_t sine_16pt[USB_ADC_MIC_TEST_TONE_TABLE_SIZE] =
 {
-    0, 3902, 7654, 11111,
-    14142, 16629, 18478, 19616,
-    20000, 19616, 18478, 16629,
-    14142, 11111, 7654, 3902,
-    0, -3902, -7654, -11111,
-    -14142, -16629, -18478, -19616,
-    -20000, -19616, -18478, -16629,
-    -14142, -11111, -7654, -3902
+    0, 7654, 14142, 18478,
+    20000, 18478, 14142, 7654,
+    0, -7654, -14142, -18478,
+    -20000, -18478, -14142, -7654
 };
 
-static int16_t usb_adc_mic_next_test_sample(void)
+static int16_t usb_adc_mic_next_test_sample(uint32_t ch)
 {
     uint32_t index;
     int16_t sample;
 
-    index = s_test_tone_phase >> USB_ADC_MIC_TEST_TONE_PHASE_SHIFT;
-    sample = sine_32pt[index & (USB_ADC_MIC_TEST_TONE_TABLE_SIZE - 1U)];
-    s_test_tone_phase += USB_ADC_MIC_TEST_TONE_PHASE_STEP;
+    index = s_test_tone_phase[ch] >> USB_ADC_MIC_TEST_TONE_PHASE_SHIFT;
+    sample = sine_16pt[index & (USB_ADC_MIC_TEST_TONE_TABLE_SIZE - 1U)];
+    s_test_tone_phase[ch] += s_test_tone_step[ch];
 
     return sample;
 }
@@ -844,10 +910,11 @@ static void usb_adc_mic_fill_test_tone(uint8_t *buffer)
 
     for (uint32_t i = 0; i < USB_ADC_MIC_SAMPLES_PER_MS; i++)
     {
-        int16_t sample = usb_adc_mic_next_test_sample();
-
+        /* Frame layout stays ch0, ch1, ch2 interleaved, same as the ADC path. */
         for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
         {
+            int16_t sample = usb_adc_mic_next_test_sample(ch);
+
             *p++ = (uint8_t)(sample & 0xff);
             *p++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
         }
@@ -884,11 +951,15 @@ static void usb_adc_mic_try_send(uint8_t busid)
     {
         s_ep_tx_busy = false;
 #if USB_ADC_MIC_USE_TEST_TONE
-        /* Roll the phase back: fill_test_tone() above already consumed one
-         * packet's worth of samples, but nothing actually went out. Without
-         * this each failed submit drops 16 samples and the tone drifts.
-         * uint32_t wraparound is fine - the DDS only uses phase mod 2^32. */
-        s_test_tone_phase -= USB_ADC_MIC_SAMPLES_PER_MS * USB_ADC_MIC_TEST_TONE_PHASE_STEP;
+        /* Roll every channel's phase back: fill_test_tone() above already
+         * consumed one packet's worth of samples, but nothing actually went
+         * out. Without this each failed submit drops 16 samples and the tone
+         * drifts. uint32_t wraparound is fine - the DDS only uses phase
+         * mod 2^32. */
+        for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
+        {
+            s_test_tone_phase[ch] -= USB_ADC_MIC_SAMPLES_PER_MS * s_test_tone_step[ch];
+        }
 #endif
     }
 }
