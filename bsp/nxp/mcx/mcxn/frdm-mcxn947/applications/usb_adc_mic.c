@@ -124,6 +124,37 @@
 #define USB_ADC_MIC_USE_OPAMP 0
 #endif
 
+/* One-pole high-pass filter on the ADC path, feeding the backend instead of
+ * usb_adc_mic_adc_to_pcm(). It doubles as a DC blocker, which is what it is
+ * here for:
+ *
+ * With CFG[REFSEL]=10 (kLPADC_ReferenceVoltageAlt3 = VDD_ANA) the LPADC spans
+ * 0..VDD_ANA, so 0 V is the bottom of its range and usb_adc_mic_adc_to_pcm()
+ * maps a grounded input to -32768 rather than 0. A microphone front end would
+ * put a VREF/2 bias on the input so silence sits at mid-scale, but there is no
+ * such network in hardware (USB_ADC_MIC_USE_OPAMP is 0 and the input goes
+ * straight to the ADC). Rather than add one, the DC is removed in software.
+ *
+ * The raw unsigned code goes in, not the raw-32768 PCM value. The filter only
+ * ever sees x[n]-x[n-1], so a constant offset in x cancels in the difference:
+ *     (raw - 32768) - (raw_prev - 32768) == raw - raw_prev
+ * Passing raw saves a step and keeps the input full-range 0..65535.
+ *
+ * Coefficient: a = exp(-2*pi*fc/fs) = 0.9980384 for fc = 5 Hz, fs = 16 kHz.
+ * The nearest Q15 grid point is 32704/32768, whose actual cutoff is 5.01 Hz
+ * (5 Hz is not exactly representable, and only a enters the recurrence).
+ *
+ * Response: -3 dB at 5 Hz, -1.0 dB at 10 Hz, -0.3 dB at 20 Hz, then ~0 dB,
+ * so voice content (roughly 80 Hz and up) passes through uncut.
+ *
+ * A DC step decays with tau = 1/(2*pi*fc) = 31.8 ms, so about 5 tau = 160 ms
+ * after a level change the offset is gone. That is the cost of a low fc; 10 Hz
+ * would converge in ~80 ms but start cutting the mic's 20-30 Hz bottom. */
+#define USB_ADC_MIC_HPF_ALPHA_Q15           32704U
+#define USB_ADC_MIC_HPF_SCALE               32768U
+#define USB_ADC_MIC_HPF_SHIFT               15U
+#define USB_ADC_MIC_HPF_ROUND               (1U << 14)
+
 /* LPADC channel numbers for ADC0_A2 + ADC1_A0 + ADC1_B0. */
 #ifndef USB_ADC_MIC_ADC0_A_CHANNEL
 #define USB_ADC_MIC_ADC0_A_CHANNEL 2U
@@ -232,6 +263,20 @@ static const uint32_t s_test_tone_step[USB_ADC_MIC_CHANNELS] =
     USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ2)
 };
 #endif
+/* Last input code and last filter output per channel, both in raw counts.
+ *
+ * s_hpf_prev_out[] is clamped to int16 before storage, which is what bounds
+ * a * prev_out to about 1.07e9 and keeps the int64 accumulate under control.
+ * s_hpf_prev_in[] only holds the previous ADC code so the difference can be
+ * taken without re-reading the DMA buffer.
+ *
+ * usb_adc_mic_hpf() only runs from the eDMA callback while s_streaming is
+ * true, and usb_adc_mic_ring_reset() only runs from usb_adc_mic_start_stream()
+ * while s_streaming is false, so the two never overlap and no locking is
+ * needed. Deliberately not volatile: only the CPU touches these, unlike
+ * s_adc*_samples[] which the DMA writes. */
+static int32_t s_hpf_prev_in[USB_ADC_MIC_CHANNELS];
+static int32_t s_hpf_prev_out[USB_ADC_MIC_CHANNELS];
 
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_usb_tx_buffer[USB_ADC_MIC_PACKET_BYTES];
 static struct rt_semaphore s_usb_tx_sem;
@@ -378,6 +423,11 @@ static void usb_adc_mic_ring_reset(void)
     s_dma_done_count[1] = 0U;
     s_dma_done_count[2] = 0U;
     s_mixed_count = 0U;
+    for (uint32_t ch = 0U; ch < USB_ADC_MIC_CHANNELS; ch++)
+    {
+        s_hpf_prev_in[ch] = 0;
+        s_hpf_prev_out[ch] = 0;
+    }
     rt_hw_interrupt_enable(level);
 }
 
@@ -428,6 +478,52 @@ static int16_t usb_adc_mic_adc_to_pcm(uint32_t raw)
     return (int16_t)((int32_t)sample - 32768);
 }
 
+/* One-pole high-pass, direct form:
+ *     y[n] = a * y[n-1] + (x[n] - x[n-1])
+ * with H(z) = (1 - z^-1) / (1 - a * z^-1), so |H(pi)| = 2/(1+a) = 1.001.
+ *
+ * x is the raw unsigned LPADC code, 0..65535. Each product fits int32 on its
+ * own (a * 32767 is 1.07e9, 32768 * 65535 is 2.15e9), but their sum can reach
+ * 3.2e9 and would overflow int32, hence the int64 accumulate.
+ *
+ * The + ROUND makes the 15-bit shift round-half-up. The difference term is an
+ * exact multiple of 2^15, so rounding the sum is the same as rounding only the
+ * feedback term.
+ *
+ * The clip is the only place int16 is applied. A DC step transients to 32767
+ * and decays from there, and |H(pi)| > 1 means a full-scale square wave peaks
+ * just over 32767 and clips one count.
+ *
+ * The integer state stalls when |y| <= 256 counts, so a DC step settles at
+ * about 256 counts rather than exactly zero - -42 dBFS, below anything the
+ * backend cares about. Seeding y[0] to x[0] instead of 0 would kill the 160 ms
+ * startup click a biased input plays against the clip, at the cost of a
+ * per-channel first-sample flag. */
+static int16_t usb_adc_mic_hpf(uint32_t raw, uint32_t ch)
+{
+    int64_t num;
+    int32_t diff;
+    int32_t out;
+
+    diff = (int32_t)raw - s_hpf_prev_in[ch];
+    s_hpf_prev_in[ch] = (int32_t)raw;
+
+    num = (int64_t)USB_ADC_MIC_HPF_ALPHA_Q15 * s_hpf_prev_out[ch]
+        + (int64_t)USB_ADC_MIC_HPF_SCALE * diff;
+    out = (int32_t)((num + USB_ADC_MIC_HPF_ROUND) >> USB_ADC_MIC_HPF_SHIFT);
+    if (out > 32767)
+    {
+        out = 32767;
+    }
+    else if (out < -32768)
+    {
+        out = -32768;
+    }
+
+    s_hpf_prev_out[ch] = out;
+    return (int16_t)out;
+}
+
 static void usb_adc_mic_mix_block(uint32_t block)
 {
     uint8_t pcm[USB_ADC_MIC_PACKET_BYTES];
@@ -442,7 +538,7 @@ static void usb_adc_mic_mix_block(uint32_t block)
             int16_t sample;
 
             src = s_adc_sample_src[ch] + (block * USB_ADC_MIC_SAMPLES_PER_MS);
-            sample = usb_adc_mic_adc_to_pcm(src[i]);
+            sample = usb_adc_mic_hpf(src[i], ch);
             *dst++ = (uint8_t)(sample & 0xff);
             *dst++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
         }
