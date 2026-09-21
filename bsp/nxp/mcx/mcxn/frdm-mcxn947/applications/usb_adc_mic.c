@@ -36,10 +36,7 @@
 
 #ifdef CONFIG_USB_HS
 /* HS isochronous: microframes = 2^(bInterval - 1), i.e. bInterval = log2(microframes) + 1.
- * 2^3 = 8 microframes = 1 ms matches the 16 samples per 96-byte packet, so 0x04.
- * 0x03 is 2^2 = 4 microframes = 500 us: the host polled twice per ms, so the
- * ring's 1000 blocks/s could not feed 2000 packets/s and every second packet
- * was zero-filled (see "micstat": submitted=done=2000, underrun=1000). */
+ * 1 ms per packet is 8 microframes = 2^3, hence 0x04. */
 #define EP_INTERVAL 0x04
 #else
 #define EP_INTERVAL 0x01
@@ -57,50 +54,6 @@
 #define USB_ADC_MIC_TX_THREAD_STACK_SIZE 2048U
 #define USB_ADC_MIC_TX_THREAD_PRIORITY   8U
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
-
-#ifndef USB_ADC_MIC_USE_TEST_TONE
-#define USB_ADC_MIC_USE_TEST_TONE 0
-#endif
-
-#if USB_ADC_MIC_USE_TEST_TONE
-/* One tone per channel, so a mix-up between the three channels shows up as a
- * line at the wrong frequency instead of three identical traces. */
-#define USB_ADC_MIC_TEST_TONE_HZ0        1000U
-#define USB_ADC_MIC_TEST_TONE_HZ1        2000U
-#define USB_ADC_MIC_TEST_TONE_HZ2        3000U
-/* sine_16pt[] is one period of a tone sampled at the audio rate, so it can
- * serve any of the three frequencies: 1 kHz at 16 kHz is 16 samples per
- * period, so TABLE_SIZE is 16 and the 1 kHz step lands exactly on 2^28 (one
- * table point per output sample). 2 kHz and 3 kHz reuse the same table with a
- * faster step (2 and 3 table points per sample), which is why the table must
- * stay "one period" rather than "1 kHz samples".
- *
- * PHASE_SHIFT must stay 32 - log2(TABLE_SIZE) = 28: index is (phase >>
- * PHASE_SHIFT) out of a 32-bit phase, so a smaller shift would wrap the index
- * around and a larger one would only ever address the table's upper half.
- *
- * HZ * TABLE_SIZE must be a multiple of SAMPLE_RATE (enforced below), i.e. the
- * index must advance by a whole number of table points each sample. If it does
- * not, the index sequence stops being periodic and the tone picks up a comb of
- * sidebands around the fundamental: 997 Hz gave lines every ~96 Hz up to 3% of
- * the fundamental because 997 * 32 / 16000 = 1.994 instead of an integer. */
-#define USB_ADC_MIC_TEST_TONE_TABLE_SIZE  16U
-#define USB_ADC_MIC_TEST_TONE_PHASE_SHIFT 28U
-#define USB_ADC_MIC_TEST_TONE_PHASE_STEP(hz) \
-    ((uint32_t)(((uint64_t)(hz) << 32) / USB_ADC_MIC_SAMPLE_RATE))
-#define USB_ADC_MIC_TEST_TONE_ADVANCE_OK(hz) \
-    (((hz) * USB_ADC_MIC_TEST_TONE_TABLE_SIZE) % USB_ADC_MIC_SAMPLE_RATE == 0)
-
-#if !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ0) || \
-    !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ1) || \
-    !USB_ADC_MIC_TEST_TONE_ADVANCE_OK(USB_ADC_MIC_TEST_TONE_HZ2)
-#error "test tone: each HZ * TABLE_SIZE must be a multiple of SAMPLE_RATE, or the tone gets harmonic sidebands"
-#endif
-
-#if USB_ADC_MIC_CHANNELS > 3
-#error "test tone steps are defined for 3 channels only"
-#endif
-#endif
 
 #define USB_ADC_MIC_DMA_BLOCKS 8U
 #define USB_ADC_MIC_PCM_BLOCKS 8U
@@ -124,32 +77,20 @@
 #define USB_ADC_MIC_USE_OPAMP 0
 #endif
 
-/* One-pole high-pass filter on the ADC path, feeding the backend instead of
- * usb_adc_mic_adc_to_pcm(). It doubles as a DC blocker, which is what it is
- * here for:
+/* One-pole high-pass filter on the ADC path, feeding the backend directly. It
+ * is the DC blocker here: with kLPADC_ReferenceVoltageAlt3 the LPADC spans
+ * 0..VDD_ANA, so 0 V is the bottom of its range, and there is no VREF/2 bias
+ * network on the input (USB_ADC_MIC_USE_OPAMP is 0), so the DC has to be
+ * removed in software.
  *
- * With CFG[REFSEL]=10 (kLPADC_ReferenceVoltageAlt3 = VDD_ANA) the LPADC spans
- * 0..VDD_ANA, so 0 V is the bottom of its range and usb_adc_mic_adc_to_pcm()
- * maps a grounded input to -32768 rather than 0. A microphone front end would
- * put a VREF/2 bias on the input so silence sits at mid-scale, but there is no
- * such network in hardware (USB_ADC_MIC_USE_OPAMP is 0 and the input goes
- * straight to the ADC). Rather than add one, the DC is removed in software.
+ * The raw unsigned code goes in rather than a raw-32768 PCM value: the filter
+ * only ever sees x[n]-x[n-1], so a constant offset cancels in the difference.
  *
- * The raw unsigned code goes in, not the raw-32768 PCM value. The filter only
- * ever sees x[n]-x[n-1], so a constant offset in x cancels in the difference:
- *     (raw - 32768) - (raw_prev - 32768) == raw - raw_prev
- * Passing raw saves a step and keeps the input full-range 0..65535.
- *
- * Coefficient: a = exp(-2*pi*fc/fs) = 0.9980384 for fc = 5 Hz, fs = 16 kHz.
- * The nearest Q15 grid point is 32704/32768, whose actual cutoff is 5.01 Hz
- * (5 Hz is not exactly representable, and only a enters the recurrence).
- *
- * Response: -3 dB at 5 Hz, -1.0 dB at 10 Hz, -0.3 dB at 20 Hz, then ~0 dB,
- * so voice content (roughly 80 Hz and up) passes through uncut.
- *
- * A DC step decays with tau = 1/(2*pi*fc) = 31.8 ms, so about 5 tau = 160 ms
- * after a level change the offset is gone. That is the cost of a low fc; 10 Hz
- * would converge in ~80 ms but start cutting the mic's 20-30 Hz bottom. */
+ * Coefficient a = exp(-2*pi*fc/fs) = 0.9980384 for fc = 5 Hz, fs = 16 kHz; the
+ * nearest Q15 grid point is 32704/32768, actual cutoff 5.01 Hz. Response is
+ * -3 dB at 5 Hz, -1.0 dB at 10 Hz, -0.3 dB at 20 Hz and ~0 dB above, so voice
+ * content (roughly 80 Hz and up) passes through uncut. A DC step settles after
+ * about 5 tau = 160 ms (tau = 1/(2*pi*fc) = 31.8 ms). */
 #define USB_ADC_MIC_HPF_ALPHA_Q15           32704U
 #define USB_ADC_MIC_HPF_SCALE               32768U
 #define USB_ADC_MIC_HPF_SHIFT               15U
@@ -247,34 +188,17 @@ static uint8_t s_pcm_ring[USB_ADC_MIC_PCM_BLOCKS][USB_ADC_MIC_PACKET_BYTES];
 static volatile uint8_t s_pcm_read;
 static volatile uint8_t s_pcm_write;
 static volatile uint8_t s_pcm_count;
-static volatile uint32_t s_pcm_overruns;
-#if !USB_ADC_MIC_USE_TEST_TONE
-static volatile uint32_t s_usb_underruns;
-#endif
 static volatile bool s_usb_mute_state[USB_ADC_MIC_CHANNELS + 1U];
 static volatile int s_usb_volume_db[USB_ADC_MIC_CHANNELS + 1U];
-#if USB_ADC_MIC_USE_TEST_TONE
-static uint32_t s_test_tone_phase[USB_ADC_MIC_CHANNELS];
-
-static const uint32_t s_test_tone_step[USB_ADC_MIC_CHANNELS] =
-{
-    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ0),
-    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ1),
-    USB_ADC_MIC_TEST_TONE_PHASE_STEP(USB_ADC_MIC_TEST_TONE_HZ2)
-};
-#endif
-/* Last input code and last filter output per channel, both in raw counts.
+/* Per-channel filter state, both in raw ADC counts: the previous input code and
+ * the previous output. prev_out is clamped to int16 before storage so the
+ * feedback term stays bounded (see usb_adc_mic_hpf()).
  *
- * s_hpf_prev_out[] is clamped to int16 before storage, which is what bounds
- * a * prev_out to about 1.07e9 and keeps the int64 accumulate under control.
- * s_hpf_prev_in[] only holds the previous ADC code so the difference can be
- * taken without re-reading the DMA buffer.
- *
- * usb_adc_mic_hpf() only runs from the eDMA callback while s_streaming is
- * true, and usb_adc_mic_ring_reset() only runs from usb_adc_mic_start_stream()
- * while s_streaming is false, so the two never overlap and no locking is
- * needed. Deliberately not volatile: only the CPU touches these, unlike
- * s_adc*_samples[] which the DMA writes. */
+ * usb_adc_mic_hpf() only runs from the eDMA callback while s_streaming is true,
+ * and usb_adc_mic_ring_reset() only from usb_adc_mic_start_stream() while it is
+ * false, so the two never overlap and no locking is needed. Deliberately not
+ * volatile: only the CPU touches these, unlike s_adc*_samples[] which the DMA
+ * writes. */
 static int32_t s_hpf_prev_in[USB_ADC_MIC_CHANNELS];
 static int32_t s_hpf_prev_out[USB_ADC_MIC_CHANNELS];
 
@@ -440,7 +364,6 @@ static void usb_adc_mic_ring_push(const uint8_t *data)
     {
         s_pcm_read = (uint8_t)((s_pcm_read + 1U) % USB_ADC_MIC_PCM_BLOCKS);
         s_pcm_count--;
-        s_pcm_overruns++;
     }
 
     memcpy(s_pcm_ring[s_pcm_write], data, USB_ADC_MIC_PACKET_BYTES);
@@ -449,7 +372,6 @@ static void usb_adc_mic_ring_push(const uint8_t *data)
     rt_hw_interrupt_enable(level);
 }
 
-#if !USB_ADC_MIC_USE_TEST_TONE
 static bool usb_adc_mic_ring_pop(uint8_t *data)
 {
     bool has_data = false;
@@ -467,16 +389,6 @@ static bool usb_adc_mic_ring_pop(uint8_t *data)
 
     return has_data;
 }
-#endif
-
-static int16_t usb_adc_mic_adc_to_pcm(uint32_t raw)
-{
-    uint16_t sample;
-
-    sample = (uint16_t)(raw & ADC_RESFIFO_D_MASK);
-
-    return (int16_t)((int32_t)sample - 32768);
-}
 
 /* One-pole high-pass, direct form:
  *     y[n] = a * y[n-1] + (x[n] - x[n-1])
@@ -484,21 +396,15 @@ static int16_t usb_adc_mic_adc_to_pcm(uint32_t raw)
  *
  * x is the raw unsigned LPADC code, 0..65535. Each product fits int32 on its
  * own (a * 32767 is 1.07e9, 32768 * 65535 is 2.15e9), but their sum can reach
- * 3.2e9 and would overflow int32, hence the int64 accumulate.
+ * 3.2e9 and would overflow int32, hence the int64 accumulate. + ROUND makes the
+ * 15-bit shift round-half-up; the difference term is an exact multiple of 2^15,
+ * so rounding the sum is the same as rounding only the feedback term.
  *
- * The + ROUND makes the 15-bit shift round-half-up. The difference term is an
- * exact multiple of 2^15, so rounding the sum is the same as rounding only the
- * feedback term.
- *
- * The clip is the only place int16 is applied. A DC step transients to 32767
- * and decays from there, and |H(pi)| > 1 means a full-scale square wave peaks
- * just over 32767 and clips one count.
- *
- * The integer state stalls when |y| <= 256 counts, so a DC step settles at
- * about 256 counts rather than exactly zero - -42 dBFS, below anything the
- * backend cares about. Seeding y[0] to x[0] instead of 0 would kill the 160 ms
- * startup click a biased input plays against the clip, at the cost of a
- * per-channel first-sample flag. */
+ * The clip is the only place int16 is applied: a DC step transients to 32767 and
+ * decays from there, and |H(pi)| > 1 means a full-scale square wave peaks just
+ * over 32767 and clips one count. The integer state stalls when |y| <= 256
+ * counts, so a DC step settles at about 256 counts rather than exactly zero -
+ * -42 dBFS, below anything the backend cares about. */
 static int16_t usb_adc_mic_hpf(uint32_t raw, uint32_t ch)
 {
     int64_t num;
@@ -629,10 +535,6 @@ static void usb_adc_mic_prepare_dma_ring(edma_handle_t *handle,
     }
 }
 
-/* Only reachable from usb_adc_mic_start_stream()'s #if !USB_ADC_MIC_USE_TEST_TONE
- * block, so wrap the definition to match - otherwise armcc warns about an unused
- * static function. */
-#if !USB_ADC_MIC_USE_TEST_TONE
 static bool usb_adc_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_config_t *transfer)
 {
     status_t status;
@@ -649,7 +551,6 @@ static bool usb_adc_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_conf
 
     return true;
 }
-#endif
 
 static void usb_adc_mic_init_opamp(OPAMP_Type *base)
 {
@@ -799,8 +700,6 @@ static void usb_adc_mic_config_adc1(void)
 
 static void usb_adc_mic_config_ctimer(void)
 {
-#if 1
-
     ctimer_config_t timer_config;
     ctimer_match_config_t match_config;
     uint32_t timer_clk;
@@ -833,27 +732,6 @@ static void usb_adc_mic_config_ctimer(void)
     match_config.enableInterrupt = false;
 
     CTIMER_SetupMatch(CTIMER0, kCTIMER_Match_3, &match_config);
-#else
-    ctimer_config_t timer_config;
-    ctimer_match_config_t match_config;
-    uint32_t timer_clk;
-    uint32_t match_value;
-
-    CTIMER_GetDefaultConfig(&timer_config);
-    CTIMER_Init(CTIMER0, &timer_config);
-
-    timer_clk = CLOCK_GetCTimerClkFreq(0U);
-    match_value = (timer_clk / USB_ADC_MIC_CTIMER_MATCH_RATE) - 1U;
-
-    memset(&match_config, 0, sizeof(match_config));
-    match_config.enableCounterReset = true;
-    match_config.enableCounterStop = false;
-    match_config.matchValue = match_value;
-    match_config.outControl = kCTIMER_Output_Toggle;
-    match_config.outPinInitState = false;
-    match_config.enableInterrupt = false;
-    CTIMER_SetupMatch(CTIMER0, kCTIMER_Match_3, &match_config);
-#endif
 }
 
 static void usb_adc_mic_hw_init(void)
@@ -915,26 +793,11 @@ static bool usb_adc_mic_start_stream(void)
     usb_adc_mic_stop_stream();
     usb_adc_mic_ring_reset();
     memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
-#if USB_ADC_MIC_USE_TEST_TONE
-    for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
-    {
-        s_test_tone_phase[ch] = 0U;
-    }
-#endif
 
     LPADC_DoResetFIFO0(ADC0);
     LPADC_DoResetFIFO0(ADC1);
     LPADC_DoResetFIFO1(ADC1);
 
-/* In test tone mode the samples come from sine_16pt[] straight into
- * s_usb_tx_buffer, so nothing reads the ADC DMA destination buffers. The three
- * EDMA_SubmitLoopTransfer() calls must not be allowed to veto streaming: each
- * was one failure that killed the whole stream.
- *
- * CTIMER is intentionally left running. No LPADC interrupt is enabled anywhere
- * in this file, so the undrained ADC FIFOs just overflow silently, and leaving
- * it running also means usb_adc_mic_stop_stream() needs no changes. */
-#if !USB_ADC_MIC_USE_TEST_TONE
     if (!usb_adc_mic_start_dma_ring(&s_dma_handle[0], &s_dma_transfer[0][0]))
     {
         return false;
@@ -950,7 +813,6 @@ static bool usb_adc_mic_start_stream(void)
         EDMA_AbortTransfer(&s_dma_handle[1]);
         return false;
     }
-#endif
 
     s_streaming = true;
     s_ep_tx_busy = false;
@@ -979,45 +841,6 @@ static void usb_adc_mic_stop_stream(void)
     s_ep_tx_busy = false;
 }
 
-#if USB_ADC_MIC_USE_TEST_TONE
-static const int16_t sine_16pt[USB_ADC_MIC_TEST_TONE_TABLE_SIZE] =
-{
-    0, 7654, 14142, 18478,
-    20000, 18478, 14142, 7654,
-    0, -7654, -14142, -18478,
-    -20000, -18478, -14142, -7654
-};
-
-static int16_t usb_adc_mic_next_test_sample(uint32_t ch)
-{
-    uint32_t index;
-    int16_t sample;
-
-    index = s_test_tone_phase[ch] >> USB_ADC_MIC_TEST_TONE_PHASE_SHIFT;
-    sample = sine_16pt[index & (USB_ADC_MIC_TEST_TONE_TABLE_SIZE - 1U)];
-    s_test_tone_phase[ch] += s_test_tone_step[ch];
-
-    return sample;
-}
-
-static void usb_adc_mic_fill_test_tone(uint8_t *buffer)
-{
-    uint8_t *p = buffer;
-
-    for (uint32_t i = 0; i < USB_ADC_MIC_SAMPLES_PER_MS; i++)
-    {
-        /* Frame layout stays ch0, ch1, ch2 interleaved, same as the ADC path. */
-        for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
-        {
-            int16_t sample = usb_adc_mic_next_test_sample(ch);
-
-            *p++ = (uint8_t)(sample & 0xff);
-            *p++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
-        }
-    }
-}
-#endif
-
 static void usb_adc_mic_try_send(uint8_t busid)
 {
     int ret;
@@ -1031,32 +854,16 @@ static void usb_adc_mic_try_send(uint8_t busid)
         return;
     }
 
-#if USB_ADC_MIC_USE_TEST_TONE
-    usb_adc_mic_fill_test_tone(s_usb_tx_buffer);
-#else
     if (!usb_adc_mic_ring_pop(s_usb_tx_buffer))
     {
         memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
-        s_usb_underruns++;
     }
-#endif
 
     s_ep_tx_busy = true;
     ret = usbd_ep_start_write(busid, AUDIO_IN_EP, s_usb_tx_buffer, sizeof(s_usb_tx_buffer));
     if (ret < 0)
     {
         s_ep_tx_busy = false;
-#if USB_ADC_MIC_USE_TEST_TONE
-        /* Roll every channel's phase back: fill_test_tone() above already
-         * consumed one packet's worth of samples, but nothing actually went
-         * out. Without this each failed submit drops 16 samples and the tone
-         * drifts. uint32_t wraparound is fine - the DDS only uses phase
-         * mod 2^32. */
-        for (uint32_t ch = 0; ch < USB_ADC_MIC_CHANNELS; ch++)
-        {
-            s_test_tone_phase[ch] -= USB_ADC_MIC_SAMPLES_PER_MS * s_test_tone_step[ch];
-        }
-#endif
     }
 }
 
@@ -1086,19 +893,11 @@ void usbd_audio_open(uint8_t busid, uint8_t intf)
     if (usb_adc_mic_start_stream())
     {
         USB_LOG_RAW("ADC MIC OPEN\r\n");
-        /* PORTSC1's PSPD is only set by the HS chirp, which has certainly
-         * happened by the time the host sends SET_INTERFACE - printing it at
-         * component-init time just reports the reset value 0x00, which this
-         * port maps to full speed. USB_SPEED_LOW=1, FULL=2, HIGH=3 (usb_def.h).
-         * Expect 3: a 2 (full speed) would make EP_INTERVAL 0x03 mean 3 ms of
-         * interval for 1 ms of audio. */
         USB_LOG_RAW("ADC MIC port speed: %u\r\n", (unsigned)usbd_get_port_speed(busid));
         usb_adc_mic_kick_tx();
     }
     else
     {
-        /* Silence with no "ADC MIC OPEN" line means the host never issued
-         * SetInterface(1,1) and this function was never reached. */
         USB_LOG_ERR("ADC MIC OPEN failed: stream start failed\r\n");
     }
 }
