@@ -10,7 +10,7 @@
       <TargetName>rtthread-frdm-mcxn947</TargetName>
       <ToolsetNumber>0x4</ToolsetNumber>
       <ToolsetName>ARM-ADS</ToolsetName>
-      <pCCUsed>6160000::V6.16::ARMCLANG</pCCUsed>
+      <pCCUsed>6210000::V6.21::ARMCLANG</pCCUsed>
       <uAC6>1</uAC6>
       <TargetOption>
         <TargetCommonOption>
@@ -338,9 +338,9 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--target=arm-arm-none-eabi</MiscControls>
-              <Define>CPU_MCXN947VDF_cm33_core0, RT_USING_LIBC, __STDC_LIMIT_MACROS, __RTTHREAD__, __CLK_TCK=RT_TICK_PER_SECOND, DEBUG, RT_USING_ARMLIBC</Define>
+              <Define>__STDC_LIMIT_MACROS, CONFIG_USB_HS, DEBUG, __RTTHREAD__, RT_USING_LIBC, RT_USING_ARMLIBC, CPU_MCXN947VDF_cm33_core0, __CLK_TCK=RT_TICK_PER_SECOND</Define>
               <Undefine></Undefine>
-              <IncludePath>board\MCUX_Config\board;..\..\..\..\..\components\drivers\include;packages\nxp-mcx-cmsis-latest\Core\Include;..\..\..\..\..\components\drivers\usb\cherryusb\core;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\xbox;..\..\..\..\..\libcpu\arm\common;..\..\..\..\..\components\net\utest;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\nboot;..\..\..\..\..\components\drivers\usb\cherryusb\class\hub;..\..\..\..\..\components\drivers\usb\cherryusb\class\msc;..\..\..\..\..\components\drivers\include;..\..\..\..\..\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\adb;..\..\..\..\..\components\utilities\ulog;..\..\..\..\..\components\drivers\usb\cherryusb\class\midi;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\net;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\libc\compilers\common\extension;..\..\..\..\..\components\drivers\usb\cherryusb\port\chipidea;..\..\..\..\..\components\drivers\clock_time;..\..\..\..\..\components\drivers\usb\cherryusb\common;packages\nxp-mcx-series-latest\MCXN947\drivers;..\..\..\..\..\components\libc\compilers\common\extension\fcntl\octal;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\wifi;..\..\..\..\..\components\drivers\usb\cherryusb\osal;.;..\..\..\..\..\components\drivers\usb\cherryusb\class\video;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\runbootloader;..\..\..\..\..\components\drivers\include;board;..\..\..\..\..\components\libc\posix\io\eventfd;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\mem_interface;..\..\..\..\..\components\finsh;..\..\..\..\..\libcpu\arm\cortex-m33;..\..\..\..\..\components\libc\posix\ipc;..\..\..\..\..\components\drivers\usb\cherryusb;..\libraries\drivers\config;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\libc\posix\io\poll;..\..\..\..\..\components\drivers\usb\cherryusb\class\dfu;..\..\..\..\..\components\drivers\usb\cherryusb\class\cdc;..\..\..\..\..\components\drivers\smp_call;packages\nxp-mcx-series-latest\MCXN947;..\libraries\drivers;..\..\..\..\..\components\drivers\usb\cherryusb\class\hid;..\..\..\..\..\components\drivers\usb\cherryusb\class\serial;..\..\..\..\..\components\libc\posix\io\epoll;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\display;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\flash;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\audio;applications;..\..\..\..\..\components\drivers\usb\cherryusb\class\wireless;..\..\..\..\..\components\libc\compilers\common\include</IncludePath>
+              <IncludePath>.;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\runbootloader;..\..\..\..\..\components\drivers\clock_time;..\..\..\..\..\libcpu\arm\common;..\..\..\..\..\components\libc\compilers\common\extension\fcntl\octal;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\mem_interface;..\..\..\..\..\components\drivers\usb\cherryusb\class\cdc;..\..\..\..\..\components\drivers\usb\cherryusb\osal;packages\nxp-mcx-cmsis-latest\Core\Include;..\..\..\..\..\components\drivers\usb\cherryusb\core;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\display;..\..\..\..\..\components\drivers\usb\cherryusb\class\video;packages\nxp-mcx-series-latest\MCXN947;..\..\..\..\..\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\hid;..\..\..\..\..\components\drivers\usb\cherryusb\class\audio;board;..\..\..\..\..\components\drivers\usb\cherryusb\port\chipidea;..\..\..\..\..\components\drivers\usb\cherryusb\class\adb;applications;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\smp_call;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\nboot;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\net;..\..\..\..\..\components\drivers\usb\cherryusb\class\dfu;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\xbox;..\..\..\..\..\components\libc\posix\ipc;..\..\..\..\..\components\drivers\usb\cherryusb\class\wireless;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\class\midi;..\..\..\..\..\components\drivers\usb\cherryusb\class\serial;..\..\..\..\..\components\drivers\usb\cherryusb\class\hub;..\..\..\..\..\components\utilities\ulog;..\libraries\drivers\config;..\..\..\..\..\components\libc\compilers\common\include;board\MCUX_Config\board;..\..\..\..\..\components\net\utest;..\..\..\..\..\components\drivers\audio;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\include;packages\nxp-mcx-series-latest\MCXN947\drivers;..\..\..\..\..\components\libc\compilers\common\extension;..\..\..\..\..\components\drivers\usb\cherryusb;..\..\..\..\..\components\libc\posix\io\poll;..\..\..\..\..\libcpu\arm\cortex-m33;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\libc\posix\io\eventfd;packages\nxp-mcx-series-latest\MCXN947\drivers\romapi\flash;..\..\..\..\..\components\drivers\include;..\..\..\..\..\components\drivers\usb\cherryusb\common;..\..\..\..\..\components\drivers\usb\cherryusb\class\msc;..\..\..\..\..\components\drivers\usb\cherryusb\class\vendor\wifi;..\libraries\drivers;..\..\..\..\..\components\finsh;..\..\..\..\..\components\libc\posix\io\epoll</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -440,6 +440,118 @@
           <GroupName>DeviceDrivers</GroupName>
           <Files>
             <File>
+              <FileName>dev_audio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\components\drivers\audio\dev_audio.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>1</IncludeInBuild>
+                  <AlwaysBuild>0</AlwaysBuild>
+                  <GenerateAssemblyFile>0</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>0</AssembleAssemblyFile>
+                  <PublicsOnly>0</PublicsOnly>
+                  <StopOnExitCode>3</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls>  -std=gnu99</MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
+              <FileName>dev_audio_pipe.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\..\..\..\components\drivers\audio\dev_audio_pipe.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>1</IncludeInBuild>
+                  <AlwaysBuild>0</AlwaysBuild>
+                  <GenerateAssemblyFile>0</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>0</AssembleAssemblyFile>
+                  <PublicsOnly>0</PublicsOnly>
+                  <StopOnExitCode>3</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls>  -std=gnu99</MiscControls>
+                      <Define>__RT_IPC_SOURCE__</Define>
+                      <Undefine> </Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
               <FileName>clock_boottime.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\components\drivers\clock_time\clock_boottime.c</FilePath>
@@ -489,7 +601,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -545,7 +657,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -601,7 +713,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -657,7 +769,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -713,7 +825,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -769,7 +881,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -825,7 +937,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -881,7 +993,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -937,7 +1049,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -993,7 +1105,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1049,7 +1161,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1105,7 +1217,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1161,7 +1273,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1217,7 +1329,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1273,7 +1385,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1329,7 +1441,7 @@
                       <MiscControls>  -std=gnu99</MiscControls>
                       <Define>__RT_IPC_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1359,6 +1471,11 @@
               <FileName>cherryusb_port.c</FileName>
               <FileType>1</FileType>
               <FilePath>board\cherryusb_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_mic.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\libraries\drivers\drv_mic.c</FilePath>
             </File>
             <File>
               <FileName>drv_pin.c</FileName>
@@ -1455,7 +1572,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1511,7 +1628,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1567,7 +1684,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1623,7 +1740,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1679,7 +1796,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1735,7 +1852,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1791,7 +1908,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1847,7 +1964,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1903,7 +2020,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -1959,7 +2076,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2015,7 +2132,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2071,7 +2188,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2127,7 +2244,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2183,7 +2300,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>
@@ -2239,7 +2356,7 @@
                       <MiscControls> </MiscControls>
                       <Define>__RT_KERNEL_SOURCE__</Define>
                       <Undefine> </Undefine>
-                      <IncludePath> </IncludePath>
+                      <IncludePath></IncludePath>
                     </VariousControls>
                   </Cads>
                 </FileArmAds>

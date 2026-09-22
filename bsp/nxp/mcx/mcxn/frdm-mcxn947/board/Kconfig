@@ -121,6 +121,15 @@ menu "On-chip Peripheral Drivers"
 
             endif
 
+    menuconfig BSP_USING_ADC_MIC
+        config BSP_USING_ADC_MIC
+            bool "Enable ADC microphone (3ch LPADC -> audio device)"
+            # drv_adc.c owns ADC0 with kCLK_IN_to_ADC0 and no hardware trigger;
+            # drv_mic.c owns it with kFRO12M and CTIMER0. Never both.
+            depends on !BSP_USING_ADC
+            select RT_USING_AUDIO
+            default y
+
     menuconfig BSP_USING_DAC
         config BSP_USING_DAC
             bool "Enable DAC Channel"

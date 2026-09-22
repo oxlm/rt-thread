@@ -25,6 +25,11 @@ if  GetDepend('BSP_USING_I2C'):
 if  GetDepend('BSP_USING_ADC'):
     src += ['drv_adc.c']
 
+# SOC_MCXN947 is required: this shared directory is also built by frdm-mcxn236,
+# which has neither ADC1 side B nor the same CTIMER0/LPADC wiring.
+if  GetDepend('BSP_USING_ADC_MIC') and GetDepend('SOC_MCXN947'):
+    src += ['drv_mic.c']
+
 if  GetDepend('BSP_USING_DAC'):
     src += ['drv_dac.c']
 

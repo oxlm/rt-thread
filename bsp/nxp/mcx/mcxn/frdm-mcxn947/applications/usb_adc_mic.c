@@ -8,7 +8,6 @@
  * 2026-09-05     RT-Thread    three-channel ADC USB microphone
  */
 
-#include <rthw.h>
 #include <rtthread.h>
 
 #include <stdbool.h>
@@ -16,16 +15,10 @@
 #include <string.h>
 
 #include "board.h"
-#include "fsl_clock.h"
-#include "fsl_ctimer.h"
-#include "fsl_edma.h"
-#include "fsl_inputmux.h"
-#include "fsl_inputmux_connections.h"
-#include "fsl_lpadc.h"
-#include "fsl_opamp.h"
-#include "fsl_port.h"
+#include "drivers/dev_audio.h"
 #include "usbd_audio.h"
 #include "usbd_core.h"
+#include "drv_mic.h"
 
 #if defined(RT_CHERRYUSB_DEVICE_TEMPLATE_NONE) && defined(RT_CHERRYUSB_DEVICE_AUDIO)
 
@@ -42,21 +35,19 @@
 #define EP_INTERVAL 0x01
 #endif
 
-#define USB_ADC_MIC_SAMPLE_RATE      16000U
-#define USB_ADC_MIC_CHANNELS         3U
-#define USB_ADC_MIC_BYTES_PER_SAMPLE 2U
-#define USB_ADC_MIC_BITS_PER_SAMPLE  16U
+/* The descriptor must describe what the capture path actually produces, so the
+ * stream format comes from drv_mic.h instead of being a second copy here. */
+#define USB_ADC_MIC_SAMPLE_RATE          DRV_MIC_SAMPLE_RATE
+#define USB_ADC_MIC_CHANNELS             DRV_MIC_CHANNELS
+#define USB_ADC_MIC_BYTES_PER_SAMPLE     DRV_MIC_BYTES_PER_SAMPLE
+#define USB_ADC_MIC_BITS_PER_SAMPLE      DRV_MIC_SAMPLE_BITS
 #define USB_ADC_MIC_SAMPLES_PER_MS   (USB_ADC_MIC_SAMPLE_RATE / 1000U)
 #define USB_ADC_MIC_PACKET_BYTES     (USB_ADC_MIC_SAMPLES_PER_MS * USB_ADC_MIC_CHANNELS * USB_ADC_MIC_BYTES_PER_SAMPLE)
 #define USB_ADC_MIC_AUDIO_SLOT_BYTES (USB_ADC_MIC_CHANNELS * USB_ADC_MIC_BYTES_PER_SAMPLE)
 #define USB_ADC_MIC_EP_MAX_PACKET_BYTES (USB_ADC_MIC_PACKET_BYTES + USB_ADC_MIC_AUDIO_SLOT_BYTES)
-#define USB_ADC_MIC_CTIMER_MATCH_RATE (USB_ADC_MIC_SAMPLE_RATE)
 #define USB_ADC_MIC_TX_THREAD_STACK_SIZE 2048U
 #define USB_ADC_MIC_TX_THREAD_PRIORITY   8U
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
-
-#define USB_ADC_MIC_DMA_BLOCKS 8U
-#define USB_ADC_MIC_PCM_BLOCKS 8U
 
 #define AUDIO_IN_EP       0x81
 #define AUDIO_IN_CLOCK_ID 0x01
@@ -65,53 +56,6 @@
 #define BMCONTROL       (AUDIO_V2_CONTROL_MUTE | AUDIO_V2_CONTROL_VOLUME)
 #define INPUT_CTRL      DBVAL(BMCONTROL), DBVAL(BMCONTROL), DBVAL(BMCONTROL), DBVAL(BMCONTROL)
 #define INPUT_CH_ENABLE 0x00000007
-
-#define USB_ADC_MIC_ADC_CMD_ID     1U
-#define USB_ADC_MIC_ADC_TRIGGER_ID 0U
-
-#define USB_ADC_MIC_DMA_CHANNEL_ADC0_A 0U
-#define USB_ADC_MIC_DMA_CHANNEL_ADC1_A 3U
-#define USB_ADC_MIC_DMA_CHANNEL_ADC1_B 4U
-
-#ifndef USB_ADC_MIC_USE_OPAMP
-#define USB_ADC_MIC_USE_OPAMP 0
-#endif
-
-/* One-pole high-pass filter on the ADC path, feeding the backend directly. It
- * is the DC blocker here: with kLPADC_ReferenceVoltageAlt3 the LPADC spans
- * 0..VDD_ANA, so 0 V is the bottom of its range, and there is no VREF/2 bias
- * network on the input (USB_ADC_MIC_USE_OPAMP is 0), so the DC has to be
- * removed in software.
- *
- * The raw unsigned code goes in rather than a raw-32768 PCM value: the filter
- * only ever sees x[n]-x[n-1], so a constant offset cancels in the difference.
- *
- * Coefficient a = exp(-2*pi*fc/fs) = 0.9980384 for fc = 5 Hz, fs = 16 kHz; the
- * nearest Q15 grid point is 32704/32768, actual cutoff 5.01 Hz. Response is
- * -3 dB at 5 Hz, -1.0 dB at 10 Hz, -0.3 dB at 20 Hz and ~0 dB above, so voice
- * content (roughly 80 Hz and up) passes through uncut. A DC step settles after
- * about 5 tau = 160 ms (tau = 1/(2*pi*fc) = 31.8 ms). */
-#define USB_ADC_MIC_HPF_ALPHA_Q15           32704U
-#define USB_ADC_MIC_HPF_SCALE               32768U
-#define USB_ADC_MIC_HPF_SHIFT               15U
-#define USB_ADC_MIC_HPF_ROUND               (1U << 14)
-
-/* LPADC channel numbers for ADC0_A2 + ADC1_A0 + ADC1_B0. */
-#ifndef USB_ADC_MIC_ADC0_A_CHANNEL
-#define USB_ADC_MIC_ADC0_A_CHANNEL 2U
-#endif
-
-#ifndef USB_ADC_MIC_ADC1_A_CHANNEL
-#define USB_ADC_MIC_ADC1_A_CHANNEL 0U
-#endif
-
-#ifndef USB_ADC_MIC_ADC1_B_CHANNEL
-#define USB_ADC_MIC_ADC1_B_CHANNEL 0U
-#endif
-
-#ifndef USB_ADC_MIC_OPAMP_GAIN
-#define USB_ADC_MIC_OPAMP_GAIN kOPAMP_PosGainNonInvert1X
-#endif
 
 #define USB_CONFIG_SIZE (9 +                                                                  \
                          AUDIO_V2_AC_DESCRIPTOR_LEN +                                         \
@@ -177,55 +121,22 @@ static const uint8_t mic_default_sampling_freq_table[] =
     AUDIO_SAMPLE_FREQ_4B(0x00),
 };
 
-static volatile bool s_hw_inited;
+static rt_device_t s_mic_dev;
+static bool s_mic_dev_open;
+
 static volatile bool s_streaming;
 static volatile bool s_ep_tx_busy;
 static volatile bool s_usb_tx_worker_inited;
 static uint8_t s_usb_busid;
 static volatile uint32_t s_mic_sample_rate = USB_ADC_MIC_SAMPLE_RATE;
 
-static uint8_t s_pcm_ring[USB_ADC_MIC_PCM_BLOCKS][USB_ADC_MIC_PACKET_BYTES];
-static volatile uint8_t s_pcm_read;
-static volatile uint8_t s_pcm_write;
-static volatile uint8_t s_pcm_count;
 static volatile bool s_usb_mute_state[USB_ADC_MIC_CHANNELS + 1U];
 static volatile int s_usb_volume_db[USB_ADC_MIC_CHANNELS + 1U];
-/* Per-channel filter state, both in raw ADC counts: the previous input code and
- * the previous output. prev_out is clamped to int16 before storage so the
- * feedback term stays bounded (see usb_adc_mic_hpf()).
- *
- * usb_adc_mic_hpf() only runs from the eDMA callback while s_streaming is true,
- * and usb_adc_mic_ring_reset() only from usb_adc_mic_start_stream() while it is
- * false, so the two never overlap and no locking is needed. Deliberately not
- * volatile: only the CPU touches these, unlike s_adc*_samples[] which the DMA
- * writes. */
-static int32_t s_hpf_prev_in[USB_ADC_MIC_CHANNELS];
-static int32_t s_hpf_prev_out[USB_ADC_MIC_CHANNELS];
 
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_usb_tx_buffer[USB_ADC_MIC_PACKET_BYTES];
 static struct rt_semaphore s_usb_tx_sem;
 static struct rt_thread s_usb_tx_thread;
 rt_align(RT_ALIGN_SIZE) static rt_uint8_t s_usb_tx_thread_stack[USB_ADC_MIC_TX_THREAD_STACK_SIZE];
-
-AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc0_a_samples[USB_ADC_MIC_DMA_BLOCKS][USB_ADC_MIC_SAMPLES_PER_MS], 4U);
-AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc1_a_samples[USB_ADC_MIC_DMA_BLOCKS][USB_ADC_MIC_SAMPLES_PER_MS], 4U);
-AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc1_b_samples[USB_ADC_MIC_DMA_BLOCKS][USB_ADC_MIC_SAMPLES_PER_MS], 4U);
-
-EDMA_ALLOCATE_TCD(s_adc0_a_tcd, USB_ADC_MIC_DMA_BLOCKS);
-EDMA_ALLOCATE_TCD(s_adc1_a_tcd, USB_ADC_MIC_DMA_BLOCKS);
-EDMA_ALLOCATE_TCD(s_adc1_b_tcd, USB_ADC_MIC_DMA_BLOCKS);
-
-static edma_handle_t s_dma_handle[USB_ADC_MIC_CHANNELS];
-static edma_transfer_config_t s_dma_transfer[USB_ADC_MIC_CHANNELS][USB_ADC_MIC_DMA_BLOCKS];
-static volatile uint32_t s_dma_done_count[USB_ADC_MIC_CHANNELS];
-static volatile uint32_t s_mixed_count;
-
-static const volatile uint32_t *const s_adc_sample_src[USB_ADC_MIC_CHANNELS] =
-{
-    &s_adc0_a_samples[0][0],
-    &s_adc1_a_samples[0][0],
-    &s_adc1_b_samples[0][0],
-};
 
 static const uint8_t *device_descriptor_callback(uint8_t speed)
 {
@@ -335,509 +246,82 @@ static void usb_adc_mic_kick_tx(void)
     }
 }
 
-static void usb_adc_mic_ring_reset(void)
-{
-    rt_base_t level;
-
-    level = rt_hw_interrupt_disable();
-    s_pcm_read = 0U;
-    s_pcm_write = 0U;
-    s_pcm_count = 0U;
-    s_dma_done_count[0] = 0U;
-    s_dma_done_count[1] = 0U;
-    s_dma_done_count[2] = 0U;
-    s_mixed_count = 0U;
-    for (uint32_t ch = 0U; ch < USB_ADC_MIC_CHANNELS; ch++)
-    {
-        s_hpf_prev_in[ch] = 0;
-        s_hpf_prev_out[ch] = 0;
-    }
-    rt_hw_interrupt_enable(level);
-}
-
-static void usb_adc_mic_ring_push(const uint8_t *data)
-{
-    rt_base_t level;
-
-    level = rt_hw_interrupt_disable();
-    if (s_pcm_count >= USB_ADC_MIC_PCM_BLOCKS)
-    {
-        s_pcm_read = (uint8_t)((s_pcm_read + 1U) % USB_ADC_MIC_PCM_BLOCKS);
-        s_pcm_count--;
-    }
-
-    memcpy(s_pcm_ring[s_pcm_write], data, USB_ADC_MIC_PACKET_BYTES);
-    s_pcm_write = (uint8_t)((s_pcm_write + 1U) % USB_ADC_MIC_PCM_BLOCKS);
-    s_pcm_count++;
-    rt_hw_interrupt_enable(level);
-}
-
-static bool usb_adc_mic_ring_pop(uint8_t *data)
-{
-    bool has_data = false;
-    rt_base_t level;
-
-    level = rt_hw_interrupt_disable();
-    if (s_pcm_count > 0U)
-    {
-        memcpy(data, s_pcm_ring[s_pcm_read], USB_ADC_MIC_PACKET_BYTES);
-        s_pcm_read = (uint8_t)((s_pcm_read + 1U) % USB_ADC_MIC_PCM_BLOCKS);
-        s_pcm_count--;
-        has_data = true;
-    }
-    rt_hw_interrupt_enable(level);
-
-    return has_data;
-}
-
-/* One-pole high-pass, direct form:
- *     y[n] = a * y[n-1] + (x[n] - x[n-1])
- * with H(z) = (1 - z^-1) / (1 - a * z^-1), so |H(pi)| = 2/(1+a) = 1.001.
+/* Standard record consumer: find -> open -> AUDIO_CTL_CONFIGURE -> read, the
+ * sequence wavrecorder.c uses. rt_device_open() here is allocation free:
+ * rt_audio_register() already ran _audio_dev_init() at device init level 3 and
+ * set RT_DEVICE_FLAG_ACTIVATED, so rt_device_open() only flips flags, bumps the
+ * ref_count and calls ops->start(). That matters because this runs from
+ * USBD_IRQHandler via usbd_audio_open().
  *
- * x is the raw unsigned LPADC code, 0..65535. Each product fits int32 on its
- * own (a * 32767 is 1.07e9, 32768 * 65535 is 2.15e9), but their sum can reach
- * 3.2e9 and would overflow int32, hence the int64 accumulate. + ROUND makes the
- * 15-bit shift round-half-up; the difference term is an exact multiple of 2^15,
- * so rounding the sum is the same as rounding only the feedback term.
- *
- * The clip is the only place int16 is applied: a DC step transients to 32767 and
- * decays from there, and |H(pi)| > 1 means a full-scale square wave peaks just
- * over 32767 and clips one count. The integer state stalls when |y| <= 256
- * counts, so a DC step settles at about 256 counts rather than exactly zero -
- * -42 dBFS, below anything the backend cares about. */
-static int16_t usb_adc_mic_hpf(uint32_t raw, uint32_t ch)
+ * The CONFIGURE result is ignored, as wavrecorder.c does: drv_mic.c rejects
+ * anything but 16000 Hz / 3 ch / 16 bit and the descriptor advertises exactly
+ * that, so the two cannot drift. */
+static bool usb_adc_mic_mic_open(void)
 {
-    int64_t num;
-    int32_t diff;
-    int32_t out;
+    struct rt_audio_caps caps;
 
-    diff = (int32_t)raw - s_hpf_prev_in[ch];
-    s_hpf_prev_in[ch] = (int32_t)raw;
-
-    num = (int64_t)USB_ADC_MIC_HPF_ALPHA_Q15 * s_hpf_prev_out[ch]
-        + (int64_t)USB_ADC_MIC_HPF_SCALE * diff;
-    out = (int32_t)((num + USB_ADC_MIC_HPF_ROUND) >> USB_ADC_MIC_HPF_SHIFT);
-    if (out > 32767)
+    if (s_mic_dev == RT_NULL)
     {
-        out = 32767;
-    }
-    else if (out < -32768)
-    {
-        out = -32768;
-    }
-
-    s_hpf_prev_out[ch] = out;
-    return (int16_t)out;
-}
-
-static void usb_adc_mic_mix_block(uint32_t block)
-{
-    uint8_t pcm[USB_ADC_MIC_PACKET_BYTES];
-    uint8_t *dst;
-
-    dst = pcm;
-    for (uint32_t i = 0U; i < USB_ADC_MIC_SAMPLES_PER_MS; i++)
-    {
-        for (uint32_t ch = 0U; ch < USB_ADC_MIC_CHANNELS; ch++)
+        s_mic_dev = rt_device_find(DRV_MIC_NAME);
+        if (s_mic_dev == RT_NULL)
         {
-            const volatile uint32_t *src;
-            int16_t sample;
-
-            src = s_adc_sample_src[ch] + (block * USB_ADC_MIC_SAMPLES_PER_MS);
-            sample = usb_adc_mic_hpf(src[i], ch);
-            *dst++ = (uint8_t)(sample & 0xff);
-            *dst++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
+            USB_LOG_ERR("ADC MIC audio device %s not found\r\n", DRV_MIC_NAME);
+            return false;
         }
     }
 
-    usb_adc_mic_ring_push(pcm);
-}
-
-static uint32_t usb_adc_mic_min_done_count(void)
-{
-    uint32_t min_done;
-
-    min_done = s_dma_done_count[0];
-    if (s_dma_done_count[1] < min_done)
+    if (s_mic_dev_open)
     {
-        min_done = s_dma_done_count[1];
-    }
-    if (s_dma_done_count[2] < min_done)
-    {
-        min_done = s_dma_done_count[2];
+        return true;
     }
 
-    return min_done;
-}
-
-static void usb_adc_mic_dma_callback(edma_handle_t *handle, void *userData, bool transferDone, uint32_t tcds)
-{
-    uint32_t dma_index;
-    uint32_t done_blocks;
-
-    (void)handle;
-
-    dma_index = (uint32_t)(uintptr_t)userData;
-    if (dma_index >= USB_ADC_MIC_CHANNELS)
+    if (rt_device_open(s_mic_dev, RT_DEVICE_OFLAG_RDONLY) != RT_EOK)
     {
-        return;
-    }
-    if (!s_streaming)
-    {
-        return;
-    }
-
-    done_blocks = tcds;
-    if (done_blocks == 0U)
-    {
-        if (!transferDone)
-        {
-            return;
-        }
-        done_blocks = 1U;
-    }
-
-    s_dma_done_count[dma_index] += done_blocks;
-    while (s_mixed_count < usb_adc_mic_min_done_count())
-    {
-        uint32_t block;
-
-        block = s_mixed_count % USB_ADC_MIC_DMA_BLOCKS;
-        usb_adc_mic_mix_block(block);
-        s_mixed_count++;
-    }
-}
-
-static void usb_adc_mic_prepare_dma_ring(edma_handle_t *handle,
-                                         edma_transfer_config_t *transfer,
-                                         edma_tcd_t *tcd,
-                                         uint32_t channel,
-                                         int32_t request,
-                                         const volatile uint32_t *fifo,
-                                         volatile uint32_t raw[USB_ADC_MIC_DMA_BLOCKS][USB_ADC_MIC_SAMPLES_PER_MS],
-                                         void *callback_user_data)
-{
-    EDMA_CreateHandle(handle, DMA0, channel);
-    EDMA_InstallTCDMemory(handle, tcd, USB_ADC_MIC_DMA_BLOCKS);
-    EDMA_SetChannelMux(DMA0, channel, request);
-    EDMA_SetCallback(handle, usb_adc_mic_dma_callback, callback_user_data);
-
-    for (uint32_t i = 0U; i < USB_ADC_MIC_DMA_BLOCKS; i++)
-    {
-        EDMA_PrepareTransfer(&transfer[i],
-                             (void *)fifo,
-                             sizeof(uint32_t),
-                             (void *)&raw[i][0],
-                             sizeof(uint32_t),
-                             sizeof(uint32_t),
-                             sizeof(raw[i]),
-                             kEDMA_PeripheralToMemory);
-    }
-}
-
-static bool usb_adc_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_config_t *transfer)
-{
-    status_t status;
-
-    EDMA_AbortTransfer(handle);
-    status = EDMA_SubmitLoopTransfer(handle, transfer, USB_ADC_MIC_DMA_BLOCKS);
-    if (status != kStatus_Success)
-    {
-        USB_LOG_ERR("ADC mic EDMA submit failed: %d\r\n", (int)status);
+        USB_LOG_ERR("ADC MIC audio device open failed\r\n");
         return false;
     }
+    s_mic_dev_open = true;
 
-    EDMA_StartTransfer(handle);
+    rt_memset(&caps, 0, sizeof(caps));
+    caps.main_type = AUDIO_TYPE_INPUT;
+    caps.sub_type = AUDIO_DSP_PARAM;
+    caps.udata.config.samplerate = USB_ADC_MIC_SAMPLE_RATE;
+    caps.udata.config.channels = USB_ADC_MIC_CHANNELS;
+    caps.udata.config.samplebits = USB_ADC_MIC_BITS_PER_SAMPLE;
+    (void)rt_device_control(s_mic_dev, AUDIO_CTL_CONFIGURE, &caps);
 
     return true;
 }
 
-static void usb_adc_mic_init_opamp(OPAMP_Type *base)
+static void usb_adc_mic_mic_close(void)
 {
-    opamp_config_t config;
-
-    OPAMP_GetDefaultConfig(&config);
-    config.enable = true;
-    config.mode = kOPAMP_LowNoiseMode;
-    config.posGain = USB_ADC_MIC_OPAMP_GAIN;
-    config.negGain = kOPAMP_NegGainBufferMode;
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_OUTSW) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_OUTSW
-    config.enableOutputSwitch = true;
-#endif
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_ADCSW1) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_ADCSW1
-    config.enablePosADCSw1 = true;
-#else
-    config.enablePosADCSw = true;
-#endif
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_ADCSW2) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_ADCSW2
-    config.enablePosADCSw2 = true;
-#endif
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_BUFEN) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_BUFEN
-    config.enableRefBuffer = ((uint32_t)USB_ADC_MIC_OPAMP_GAIN <= 7U);
-#endif
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_INPSEL) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_INPSEL
-    config.PosInputChannelSelection = kOPAMP_PosInputChannel0;
-#endif
-#if defined(FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_TRIGMD) && FSL_FEATURE_OPAMP_HAS_OPAMP_CTR_TRIGMD
-    config.enableTriggerMode = false;
-#endif
-
-    OPAMP_Init(base, &config);
-}
-
-static void usb_adc_mic_config_adc_pins(void)
-{
-    const port_pin_config_t adc0_a2_config = {
-        kPORT_PullDisable,
-        kPORT_LowPullResistor,
-        kPORT_FastSlewRate,
-        kPORT_PassiveFilterDisable,
-        kPORT_OpenDrainDisable,
-        kPORT_LowDriveStrength,
-        kPORT_MuxAlt0,
-        kPORT_InputBufferDisable,
-        kPORT_InputNormal,
-        kPORT_UnlockRegister,
-    };
-
-    CLOCK_EnableClock(kCLOCK_Port4);
-    PORT_SetPinConfig(PORT4, 23U, &adc0_a2_config);
-}
-
-static void usb_adc_mic_init_lpadc(ADC_Type *base)
-{
-    lpadc_config_t config;
-
-    LPADC_GetDefaultConfig(&config);
-    config.enableAnalogPreliminary = true;
-#if defined(FSL_FEATURE_LPADC_HAS_CTRL_CAL_AVGS) && FSL_FEATURE_LPADC_HAS_CTRL_CAL_AVGS
-    config.conversionAverageMode = kLPADC_ConversionAverage1;
-#endif
-#if defined(FSL_FEATURE_LPADC_HAS_CFG_PWRSEL) && FSL_FEATURE_LPADC_HAS_CFG_PWRSEL
-    config.powerLevelMode = kLPADC_PowerLevelAlt4;
-#endif
-    config.powerUpDelay = 0x10U;
-    config.referenceVoltageSource = kLPADC_ReferenceVoltageAlt3;
-    config.enableInDozeMode = true;
-#if (defined(FSL_FEATURE_LPADC_FIFO_COUNT) && (FSL_FEATURE_LPADC_FIFO_COUNT == 2))
-    config.FIFO0Watermark = 0U;
-    config.FIFO1Watermark = 0U;
-#endif
-
-    LPADC_Init(base, &config);
-
-#if defined(FSL_FEATURE_LPADC_HAS_CTRL_CALOFSMODE) && FSL_FEATURE_LPADC_HAS_CTRL_CALOFSMODE
-    LPADC_DoOffsetCalibration(base, kLPADC_OffsetCalibration16bitMode);
-#else
-    LPADC_DoOffsetCalibration(base);
-#endif
-    LPADC_DoAutoCalibration(base);
-}
-
-static void usb_adc_mic_config_adc0(void)
-{
-    lpadc_conv_command_config_t command;
-    lpadc_conv_trigger_config_t trigger;
-
-    LPADC_GetDefaultConvCommandConfig(&command);
-    command.sampleChannelMode = kLPADC_SampleChannelSingleEndSideA;
-    command.channelNumber = USB_ADC_MIC_ADC0_A_CHANNEL;
-#if defined(FSL_FEATURE_LPADC_HAS_CMDL_MODE) && FSL_FEATURE_LPADC_HAS_CMDL_MODE
-    command.conversionResolutionMode = kLPADC_ConversionResolutionHigh;
-#endif
-#if defined(FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN) && FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN
-    command.enableChannelB = false;
-#endif
-    command.hardwareAverageMode = kLPADC_HardwareAverageCount1;
-    command.sampleTimeMode = kLPADC_SampleTimeADCK35;
-    LPADC_SetConvCommandConfig(ADC0, USB_ADC_MIC_ADC_CMD_ID, &command);
-
-    memset(&trigger, 0, sizeof(trigger));
-    trigger.targetCommandId = USB_ADC_MIC_ADC_CMD_ID;
-#if (defined(FSL_FEATURE_LPADC_FIFO_COUNT) && (FSL_FEATURE_LPADC_FIFO_COUNT == 2))
-    trigger.channelAFIFOSelect = 0U;
-#endif
-    trigger.enableHardwareTrigger = true;
-    LPADC_SetConvTriggerConfig(ADC0, USB_ADC_MIC_ADC_TRIGGER_ID, &trigger);
-
-    LPADC_EnableFIFO0WatermarkDMA(ADC0, true);
-    LPADC_EnableFIFO1WatermarkDMA(ADC0, false);
-}
-
-static void usb_adc_mic_config_adc1(void)
-{
-    lpadc_conv_command_config_t command;
-    lpadc_conv_trigger_config_t trigger;
-
-    LPADC_GetDefaultConvCommandConfig(&command);
-    command.sampleChannelMode = kLPADC_SampleChannelDualSingleEndBothSide;
-    command.channelNumber = USB_ADC_MIC_ADC1_A_CHANNEL;
-#if defined(FSL_FEATURE_LPADC_HAS_CMDL_ALTB_ADCH) && FSL_FEATURE_LPADC_HAS_CMDL_ALTB_ADCH
-    command.channelBNumber = USB_ADC_MIC_ADC1_B_CHANNEL;
-#endif
-#if defined(FSL_FEATURE_LPADC_HAS_CMDL_MODE) && FSL_FEATURE_LPADC_HAS_CMDL_MODE
-    command.conversionResolutionMode = kLPADC_ConversionResolutionHigh;
-#endif
-#if defined(FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN) && FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN
-    command.enableChannelB = true;
-#endif
-    command.hardwareAverageMode = kLPADC_HardwareAverageCount1;
-    command.sampleTimeMode = kLPADC_SampleTimeADCK35;
-    LPADC_SetConvCommandConfig(ADC1, USB_ADC_MIC_ADC_CMD_ID, &command);
-
-    memset(&trigger, 0, sizeof(trigger));
-    trigger.targetCommandId = USB_ADC_MIC_ADC_CMD_ID;
-#if (defined(FSL_FEATURE_LPADC_FIFO_COUNT) && (FSL_FEATURE_LPADC_FIFO_COUNT == 2))
-    trigger.channelAFIFOSelect = 0U;
-    trigger.channelBFIFOSelect = 1U;
-#endif
-    trigger.enableHardwareTrigger = true;
-    LPADC_SetConvTriggerConfig(ADC1, USB_ADC_MIC_ADC_TRIGGER_ID, &trigger);
-
-    LPADC_EnableFIFO0WatermarkDMA(ADC1, true);
-    LPADC_EnableFIFO1WatermarkDMA(ADC1, true);
-}
-
-static void usb_adc_mic_config_ctimer(void)
-{
-    ctimer_config_t timer_config;
-    ctimer_match_config_t match_config;
-    uint32_t timer_clk;
-    uint32_t periodTicks;
-
-    CTIMER_GetDefaultConfig(&timer_config);
-    CTIMER_Init(CTIMER0, &timer_config);
-
-    timer_clk = CLOCK_GetCTimerClkFreq(0U);
-    if ((timer_clk == 0U) || ((timer_clk % (USB_ADC_MIC_CTIMER_MATCH_RATE * 2U)) != 0U))
+    if (!s_mic_dev_open)
     {
         return;
     }
 
-    /* M3 is configured for kCTIMER_Output_Toggle, so the output flips every
-     * periodTicks; the LPADC hardware trigger only looks at rising edges, so the
-     * effective trigger interval is 2 x periodTicks. Use half a sample period so
-     * the rising edges land on 1 / sample rate. */
-    periodTicks = timer_clk / (USB_ADC_MIC_CTIMER_MATCH_RATE * 2U);
-    if (periodTicks < 2U)
-    {
-        return;
-    }
-
-    match_config.matchValue = periodTicks - 1U;
-    match_config.enableCounterReset = true;
-    match_config.enableCounterStop = false;
-    match_config.outControl = kCTIMER_Output_Toggle;
-    match_config.outPinInitState = false;
-    match_config.enableInterrupt = false;
-
-    CTIMER_SetupMatch(CTIMER0, kCTIMER_Match_3, &match_config);
-}
-
-static void usb_adc_mic_hw_init(void)
-{
-    if (s_hw_inited)
-    {
-        return;
-    }
-
-    CLOCK_EnableClock(kCLOCK_InputMux);
-    CLOCK_EnableClock(kCLOCK_Dma0);
-    CLOCK_AttachClk(kFRO12M_to_ADC0);
-    CLOCK_SetClkDiv(kCLOCK_DivAdc0Clk, 1U);
-    CLOCK_AttachClk(kFRO12M_to_ADC1);
-    CLOCK_SetClkDiv(kCLOCK_DivAdc1Clk, 1U);
-    CLOCK_AttachClk(kFRO12M_to_CTIMER0);
-    CLOCK_SetClkDiv(kCLOCK_DivCtimer0Clk, 1U);
-
-    INPUTMUX_Init(INPUTMUX);
-    INPUTMUX_AttachSignal(INPUTMUX, 0U, kINPUTMUX_Ctimer0M3ToAdc0Trigger);
-    INPUTMUX_AttachSignal(INPUTMUX, 0U, kINPUTMUX_Ctimer0M3ToAdc1Trigger);
-    INPUTMUX_EnableSignal(INPUTMUX, kINPUTMUX_Adc0FifoARequestToDma0Ch21Ena, true);
-    INPUTMUX_EnableSignal(INPUTMUX, kINPUTMUX_Adc1FifoARequestToDma0Ch23Ena, true);
-    INPUTMUX_EnableSignal(INPUTMUX, kINPUTMUX_Adc1FifoBRequestoDma0Ch24Ena, true);
-
-#if USB_ADC_MIC_USE_OPAMP
-    usb_adc_mic_init_opamp(OPAMP0);
-    usb_adc_mic_init_opamp(OPAMP1);
-    usb_adc_mic_init_opamp(OPAMP2);
-#endif
-
-    usb_adc_mic_config_adc_pins();
-    usb_adc_mic_init_lpadc(ADC0);
-    usb_adc_mic_init_lpadc(ADC1);
-    usb_adc_mic_config_adc0();
-    usb_adc_mic_config_adc1();
-    usb_adc_mic_config_ctimer();
-
-    usb_adc_mic_prepare_dma_ring(&s_dma_handle[0], &s_dma_transfer[0][0], s_adc0_a_tcd,
-                                 USB_ADC_MIC_DMA_CHANNEL_ADC0_A, kDma0RequestMuxAdc0FifoARequest,
-                                 &ADC0->RESFIFO[0], s_adc0_a_samples, (void *)(uintptr_t)0U);
-    usb_adc_mic_prepare_dma_ring(&s_dma_handle[1], &s_dma_transfer[1][0], s_adc1_a_tcd,
-                                 USB_ADC_MIC_DMA_CHANNEL_ADC1_A, kDma0RequestMuxAdc1FifoARequest,
-                                 &ADC1->RESFIFO[0], s_adc1_a_samples, (void *)(uintptr_t)1U);
-    usb_adc_mic_prepare_dma_ring(&s_dma_handle[2], &s_dma_transfer[2][0], s_adc1_b_tcd,
-                                 USB_ADC_MIC_DMA_CHANNEL_ADC1_B, kDma0RequestMuxAdc1FifoBRequest,
-                                 &ADC1->RESFIFO[1], s_adc1_b_samples, (void *)(uintptr_t)2U);
-
-    s_hw_inited = true;
+    rt_device_close(s_mic_dev);
+    s_mic_dev_open = false;
 }
 
 static bool usb_adc_mic_start_stream(void)
 {
-    if (!s_hw_inited)
-    {
-        usb_adc_mic_hw_init();
-    }
-
-    usb_adc_mic_stop_stream();
-    usb_adc_mic_ring_reset();
-    memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
-
-    LPADC_DoResetFIFO0(ADC0);
-    LPADC_DoResetFIFO0(ADC1);
-    LPADC_DoResetFIFO1(ADC1);
-
-    if (!usb_adc_mic_start_dma_ring(&s_dma_handle[0], &s_dma_transfer[0][0]))
+    if (!usb_adc_mic_mic_open())
     {
         return false;
     }
-    if (!usb_adc_mic_start_dma_ring(&s_dma_handle[1], &s_dma_transfer[1][0]))
-    {
-        EDMA_AbortTransfer(&s_dma_handle[0]);
-        return false;
-    }
-    if (!usb_adc_mic_start_dma_ring(&s_dma_handle[2], &s_dma_transfer[2][0]))
-    {
-        EDMA_AbortTransfer(&s_dma_handle[0]);
-        EDMA_AbortTransfer(&s_dma_handle[1]);
-        return false;
-    }
+
+    rt_memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
+    s_ep_tx_busy = false;
 
     s_streaming = true;
-    s_ep_tx_busy = false;
-    CTIMER_Reset(CTIMER0);
-    CTIMER_StartTimer(CTIMER0);
-
     return true;
 }
 
 static void usb_adc_mic_stop_stream(void)
 {
-    if (!s_hw_inited)
-    {
-        return;
-    }
-
     s_streaming = false;
-    CTIMER_StopTimer(CTIMER0);
-    EDMA_AbortTransfer(&s_dma_handle[0]);
-    EDMA_AbortTransfer(&s_dma_handle[1]);
-    EDMA_AbortTransfer(&s_dma_handle[2]);
-    LPADC_DoResetFIFO0(ADC0);
-    LPADC_DoResetFIFO0(ADC1);
-    LPADC_DoResetFIFO1(ADC1);
-
+    usb_adc_mic_mic_close();
     s_ep_tx_busy = false;
 }
 
@@ -854,9 +338,12 @@ static void usb_adc_mic_try_send(uint8_t busid)
         return;
     }
 
-    if (!usb_adc_mic_ring_pop(s_usb_tx_buffer))
+    /* rt_device_read() blocks on the record pipe's RT_PIPE_FLAG_BLOCK_RD, which
+     * is fine here: this runs on the TX thread, not in an interrupt. */
+    rt_memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
+    if (s_mic_dev_open)
     {
-        memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
+        (void)rt_device_read(s_mic_dev, 0, s_usb_tx_buffer, sizeof(s_usb_tx_buffer));
     }
 
     s_ep_tx_busy = true;
@@ -1036,7 +523,7 @@ void usb_adc_mic_init(uint8_t busid, uintptr_t reg_base)
 {
     s_mic_sample_rate = USB_ADC_MIC_SAMPLE_RATE;
 
-    usb_adc_mic_hw_init();
+
     (void)usb_adc_mic_tx_worker_init(busid);
 
     usbd_desc_register(busid, &audio_v2_descriptor);
