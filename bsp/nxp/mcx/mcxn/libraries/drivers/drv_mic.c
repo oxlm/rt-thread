@@ -27,6 +27,7 @@
 
 #ifdef BSP_USING_ADC_MIC
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -63,19 +64,21 @@
  * network on the input (DRV_MIC_USE_OPAMP is 0), so the DC has to be removed
  * in software.
  *
- * The raw unsigned code goes in rather than a raw-32768 PCM value: the filter
- * only ever sees x[n]-x[n-1], so a constant offset cancels in the difference.
+ * The 16 bit ADC_RESFIFO_D field goes in rather than a raw-32768 PCM value: the
+ * filter only ever sees x[n]-x[n-1], so the DC offset of the 0..VDD_ANA range
+ * cancels in the difference.
  *
- * Coefficient a = exp(-2*pi*fc/fs) = 0.9980384 for fc = 5 Hz, fs = 16 kHz; the
- * nearest Q15 grid point is 32704/32768, actual cutoff 5.01 Hz. Response is
- * -3 dB at 5 Hz, -1.0 dB at 10 Hz, -0.3 dB at 20 Hz and ~0 dB above, so voice
- * content (roughly 80 Hz and up) passes through uncut. A DC step settles after
- * about 5 tau = 160 ms (tau = 1/(2*pi*fc) = 31.8 ms). */
-#define DRV_MIC_HPF_ALPHA_Q15 32704U
-#define DRV_MIC_HPF_SCALE     32768U
-#define DRV_MIC_HPF_SHIFT     15U
-#define DRV_MIC_HPF_ROUND     (1U << 14)
-
+ * The coefficients are not written by hand: drv_mic_calc_hpf_coeffs() derives
+ * them from fc and the sample rate with a prewarped bilinear transform of the
+ * analog prototype H(s) = s/(s + w_a), which makes the whole filter reproducible
+ * from DRV_MIC_HPF_CUTOFF_HZ alone. For fc = 5 Hz, fs = 16 kHz that is
+ * a = 0.998038 and b0 = 0.999019, and the response is
+ * -3 dB at 5.012 Hz, -0.26 dB at 20 Hz, -0.04 dB at 50 Hz, -0.02 dB at 80 Hz,
+ * -0.003 dB at 200 Hz and 0 dB at Nyquist, so voice content (roughly 80 Hz and
+ * up) passes through uncut. A DC step settles after about 5 tau = 160 ms
+ * (tau = 1/(2*pi*fc) = 31.8 ms). */
+#define DRV_MIC_HPF_CUTOFF_HZ 5.0f
+#define DRV_MIC_PI            3.141592653589793f
 #define DRV_MIC_CTIMER_MATCH_RATE DRV_MIC_SAMPLE_RATE
 
 /* LPADC channel numbers for ADC0_A2 + ADC1_A0 + ADC1_B0. */
@@ -108,26 +111,30 @@ static struct drv_mic_dev s_mic_dev;
  * stopped, so a callback never observes a tearing value. */
 static volatile bool s_capturing;
 
-/* Per-channel filter state, both in raw ADC counts: the previous input code and
- * the previous output. prev_out is clamped to int16 before storage so the
- * feedback term stays bounded (see drv_mic_hpf()).
+/* Per-channel filter state: the previous input and the previous output, both
+ * stored as float so the feedback path carries the full unquantized value. The
+ * int16 quantization happens only at the output of drv_mic_hpf(), so its
+ * rounding error never feeds back and cannot accumulate into a DC offset.
  *
  * drv_mic_hpf() only runs from the eDMA callback while s_capturing is true,
  * and drv_mic_reset_state() only from drv_mic_start() while it is false, so the
  * two never overlap and no locking is needed. Deliberately not volatile: only
  * the CPU touches these, unlike s_adc*_samples[] which the DMA writes. */
-static int32_t s_hpf_prev_in[DRV_MIC_CHANNELS];
-static int32_t s_hpf_prev_out[DRV_MIC_CHANNELS];
+static float s_hpf_prev_in[DRV_MIC_CHANNELS];
+static float s_hpf_prev_out[DRV_MIC_CHANNELS];
+
+/* Coefficients are derived once when the device is opened (drv_mic_init) and
+ * then only multiplied by drv_mic_hpf() in the eDMA callback, so no volatile
+ * is needed: nothing rewrites them while a transfer is running. */
+static float s_hpf_alpha;
+static float s_hpf_gain;
 
 AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc0_a_samples[DRV_MIC_DMA_BLOCKS][DRV_MIC_SAMPLES_PER_MS], 4U);
 AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc1_a_samples[DRV_MIC_DMA_BLOCKS][DRV_MIC_SAMPLES_PER_MS], 4U);
 AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc1_b_samples[DRV_MIC_DMA_BLOCKS][DRV_MIC_SAMPLES_PER_MS], 4U);
 
 /* Not EDMA_ALLOCATE_TCD(): that macro spells the declaration itself as
- * "edma_tcd_t name[number]", so "static" cannot get in, which leaves three
- * external symbols. usb_adc_mic.c keeps its own copy of this capture path until
- * the audio-device one is proven, so the unqualified names would collide at link
- * time. Expand the macro by hand to match the s_adc*_samples[] arrays above. */
+ * "edma_tcd_t name[number]", so "static" cannot get in. */
 AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc0_a_tcd[DRV_MIC_DMA_BLOCKS], EDMA_TCD_ALIGN_SIZE);
 AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc1_a_tcd[DRV_MIC_DMA_BLOCKS], EDMA_TCD_ALIGN_SIZE);
 AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc1_b_tcd[DRV_MIC_DMA_BLOCKS], EDMA_TCD_ALIGN_SIZE);
@@ -153,43 +160,70 @@ static void drv_mic_prepare_dma_ring(edma_handle_t *handle,
                                      void *callback_user_data);
 static bool drv_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_config_t *transfer);
 
-/* One-pole high-pass, direct form:
- *     y[n] = a * y[n-1] + (x[n] - x[n-1])
- * with H(z) = (1 - z^-1) / (1 - a * z^-1), so |H(pi)| = 2/(1+a) = 1.001.
- *
- * x is the raw unsigned LPADC code, 0..65535. Each product fits int32 on its
- * own (a * 32767 is 1.07e9, 32768 * 65535 is 2.15e9), but their sum can reach
- * 3.2e9 and would overflow int32, hence the int64 accumulate. + ROUND makes the
- * 15-bit shift round-half-up; the difference term is an exact multiple of 2^15,
- * so rounding the sum is the same as rounding only the feedback term.
- *
- * The clip is the only place int16 is applied: a DC step transients to 32767 and
- * decays from there, and |H(pi)| > 1 means a full-scale square wave peaks just
- * over 32767 and clips one count. The integer state stalls when |y| <= 256
- * counts, so a DC step settles at about 256 counts rather than exactly zero -
- * -42 dBFS, below anything the backend cares about. */
-static int16_t drv_mic_hpf(uint32_t raw, uint32_t ch)
+/* Prewarped bilinear transform of the analog prototype H(s) = s/(s + w_a) with
+ * w_a = fs * tan(pi * fc / fs). Substituting s = fs * (1 - z^-1) / (1 + z^-1)
+ * and collecting terms gives
+ *     y[n] = a * y[n-1] + b0 * (x[n] - x[n-1])
+ *         a  = (fs - w_a) / (fs + w_a)
+ *         b0 = fs / (fs + w_a)   == (1 + a) / 2, unity gain at Nyquist
+ * Both are stored as float. Runs once per open, so the float cost never
+ * touches the sampling path. */
+static void drv_mic_calc_hpf_coeffs(void)
 {
-    int64_t num;
-    int32_t diff;
-    int32_t out;
+    float fs;
+    float w_a;
 
-    diff = (int32_t)raw - s_hpf_prev_in[ch];
-    s_hpf_prev_in[ch] = (int32_t)raw;
+    fs = (float)DRV_MIC_SAMPLE_RATE;
+    w_a = fs * tanf(DRV_MIC_PI * DRV_MIC_HPF_CUTOFF_HZ / fs);
 
-    num = (int64_t)DRV_MIC_HPF_ALPHA_Q15 * s_hpf_prev_out[ch] + (int64_t)DRV_MIC_HPF_SCALE * diff;
-    out = (int32_t)((num + DRV_MIC_HPF_ROUND) >> DRV_MIC_HPF_SHIFT);
-    if (out > 32767)
+    s_hpf_alpha = (fs - w_a) / (fs + w_a);
+    s_hpf_gain  = fs / (fs + w_a);
+
+    LOG_I("hpf fc=%.1f Hz: a=%.6f b0=%.6f\n",
+          (double)DRV_MIC_HPF_CUTOFF_HZ,
+          (double)s_hpf_alpha,
+          (double)s_hpf_gain);
+}
+
+/* One-pole high-pass, direct form:
+ *     y[n] = a * y[n-1] + b0 * (x[n] - x[n-1])
+ * with H(z) = b0 * (1 - z^-1) / (1 - a * z^-1), so |H(pi)| = 2*b0/(1+a) = 1.0.
+ *
+ * x is the 16 bit ADC_RESFIFO_D field, 0..65535. The FIFO metadata above bit 15
+ * (command source, loop count, valid) is stripped before it gets here, so a
+ * change in any of those fields cannot reach the arithmetic.
+ *
+ * All internal arithmetic is float. The key point is that prev_out stores the
+ * unquantized float y, not the int16 output. Output quantization noise stays
+ * local to that sample and does not feed back through the a = 0.998 loop,
+ * which is why a DC step settles to float-precision zero instead of stalling
+ * at half a count.
+ *
+ * The clip is the only place int16 is applied. A full-range DC step pushes
+ * y[0] = b0 * 65535 = 65471, which is clamped to 32767 and decays from there;
+ * |H(pi)| = 1 means a steady full-scale square wave peaks exactly at 32767 and
+ * does not clip. */
+static int16_t drv_mic_hpf(uint16_t raw, uint32_t ch)
+{
+    float diff;
+    float y;
+
+    diff = (float)raw - s_hpf_prev_in[ch];
+    s_hpf_prev_in[ch] = (float)raw;
+
+    y = s_hpf_alpha * s_hpf_prev_out[ch] + s_hpf_gain * diff;
+    s_hpf_prev_out[ch] = y;
+
+    if (y > 32767.0f)
     {
-        out = 32767;
+        y = 32767.0f;
     }
-    else if (out < -32768)
+    else if (y < -32768.0f)
     {
-        out = -32768;
+        y = -32768.0f;
     }
 
-    s_hpf_prev_out[ch] = out;
-    return (int16_t)out;
+    return (int16_t)lrintf(y);
 }
 
 static void drv_mic_mix_block(uint32_t block)
@@ -206,7 +240,7 @@ static void drv_mic_mix_block(uint32_t block)
             int16_t sample;
 
             src = s_adc_sample_src[ch] + (block * DRV_MIC_SAMPLES_PER_MS);
-            sample = drv_mic_hpf(src[i], ch);
+            sample = drv_mic_hpf((uint16_t)ADC_RESFIFO_D(src[i]), ch);
             *dst++ = (uint8_t)(sample & 0xff);
             *dst++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
         }
@@ -521,6 +555,8 @@ static void drv_mic_config_ctimer(void)
 static rt_err_t drv_mic_init(struct rt_audio_device *audio)
 {
     RT_ASSERT(audio != RT_NULL);
+
+    drv_mic_calc_hpf_coeffs();
 
     CLOCK_EnableClock(kCLOCK_InputMux);
     CLOCK_EnableClock(kCLOCK_Dma0);
