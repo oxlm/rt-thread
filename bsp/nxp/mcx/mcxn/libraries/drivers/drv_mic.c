@@ -98,6 +98,9 @@
 #define DRV_MIC_OPAMP_GAIN kOPAMP_PosGainNonInvert1X
 #endif
 
+#define DRV_MIC_HW_AVG        kLPADC_HardwareAverageCount8
+#define DRV_MIC_SAMPLE_TIME   kLPADC_SampleTimeADCK35
+
 struct drv_mic_dev
 {
     struct rt_audio_device audio;
@@ -466,8 +469,8 @@ static void drv_mic_config_adc0(void)
 #if defined(FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN) && FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN
     command.enableChannelB = false;
 #endif
-    command.hardwareAverageMode = kLPADC_HardwareAverageCount1;
-    command.sampleTimeMode = kLPADC_SampleTimeADCK35;
+    command.hardwareAverageMode = DRV_MIC_HW_AVG;
+    command.sampleTimeMode = DRV_MIC_SAMPLE_TIME;
     LPADC_SetConvCommandConfig(ADC0, DRV_MIC_ADC_CMD_ID, &command);
 
     memset(&trigger, 0, sizeof(trigger));
@@ -499,8 +502,8 @@ static void drv_mic_config_adc1(void)
 #if defined(FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN) && FSL_FEATURE_LPADC_HAS_CMDL_ALTBEN
     command.enableChannelB = true;
 #endif
-    command.hardwareAverageMode = kLPADC_HardwareAverageCount1;
-    command.sampleTimeMode = kLPADC_SampleTimeADCK35;
+    command.hardwareAverageMode = DRV_MIC_HW_AVG;
+    command.sampleTimeMode = DRV_MIC_SAMPLE_TIME;
     LPADC_SetConvCommandConfig(ADC1, DRV_MIC_ADC_CMD_ID, &command);
 
     memset(&trigger, 0, sizeof(trigger));
