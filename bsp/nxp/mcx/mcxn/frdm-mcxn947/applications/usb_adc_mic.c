@@ -12,13 +12,13 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "board.h"
 #include "drivers/dev_audio.h"
 #include "usbd_audio.h"
 #include "usbd_core.h"
 #include "drv_mic.h"
+#include "mic_resample.h"
 
 #if defined(RT_CHERRYUSB_DEVICE_TEMPLATE_NONE) && defined(RT_CHERRYUSB_DEVICE_AUDIO)
 
@@ -35,19 +35,40 @@
 #define EP_INTERVAL 0x01
 #endif
 
+/* Host-facing rate advertisement: 0 = a single 16 kHz rate, 1 = 8 / 16 /
+ * 32 / 48 kHz with the endpoint sized for the widest case. */
+#ifndef USB_ADC_MIC_MULTI_RATE
+#define USB_ADC_MIC_MULTI_RATE          0
+#endif
+
 /* The descriptor must describe what the capture path actually produces, so the
- * stream format comes from drv_mic.h instead of being a second copy here. */
-#define USB_ADC_MIC_SAMPLE_RATE          DRV_MIC_SAMPLE_RATE
-#define USB_ADC_MIC_CHANNELS             DRV_MIC_CHANNELS
-#define USB_ADC_MIC_BYTES_PER_SAMPLE     DRV_MIC_BYTES_PER_SAMPLE
-#define USB_ADC_MIC_BITS_PER_SAMPLE      DRV_MIC_SAMPLE_BITS
-#define USB_ADC_MIC_SAMPLES_PER_MS   (USB_ADC_MIC_SAMPLE_RATE / 1000U)
-#define USB_ADC_MIC_PACKET_BYTES     (USB_ADC_MIC_SAMPLES_PER_MS * USB_ADC_MIC_CHANNELS * USB_ADC_MIC_BYTES_PER_SAMPLE)
-#define USB_ADC_MIC_AUDIO_SLOT_BYTES (USB_ADC_MIC_CHANNELS * USB_ADC_MIC_BYTES_PER_SAMPLE)
-#define USB_ADC_MIC_EP_MAX_PACKET_BYTES (USB_ADC_MIC_PACKET_BYTES + USB_ADC_MIC_AUDIO_SLOT_BYTES)
+ * stream format comes from drv_mic.h instead of being a second copy here.
+ *
+ * The device captures at USB_ADC_MIC_CAPTURE_RATE and resamples up to whatever
+ * the host negotiated. The descriptor advertises the widest case, so it is sized
+ * from USB_ADC_MIC_MAX_RATE while the stream itself is read in capture frames. */
+#define USB_ADC_MIC_CAPTURE_RATE        DRV_MIC_SAMPLE_RATE
+#define USB_ADC_MIC_CHANNELS            DRV_MIC_CHANNELS
+#define USB_ADC_MIC_BYTES_PER_SAMPLE    DRV_MIC_BYTES_PER_SAMPLE
+#define USB_ADC_MIC_BITS_PER_SAMPLE     DRV_MIC_SAMPLE_BITS
+#if (USB_ADC_MIC_MULTI_RATE)
+#define USB_ADC_MIC_MAX_RATE            48000U
+#else
+/* Fixed at 16 kHz, not from DRV_MIC_SAMPLE_RATE (8 kHz now): advertising the
+ * capture rate would leave the resampler as a passthrough. */
+#define USB_ADC_MIC_MAX_RATE            16000U
+#endif
+#define USB_ADC_MIC_AUDIO_SLOT_BYTES    (USB_ADC_MIC_CHANNELS * USB_ADC_MIC_BYTES_PER_SAMPLE)
+#define USB_ADC_MIC_CAPTURE_FRAMES      (USB_ADC_MIC_CAPTURE_RATE / 1000U)
+#define USB_ADC_MIC_MAX_PACKET_BYTES    (USB_ADC_MIC_MAX_RATE / 1000U * USB_ADC_MIC_AUDIO_SLOT_BYTES)
+#define USB_ADC_MIC_EP_MAX_PACKET_BYTES (USB_ADC_MIC_MAX_PACKET_BYTES + USB_ADC_MIC_AUDIO_SLOT_BYTES)
 #define USB_ADC_MIC_TX_THREAD_STACK_SIZE 2048U
 #define USB_ADC_MIC_TX_THREAD_PRIORITY   8U
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
+
+#if (USB_ADC_MIC_CHANNELS != MIC_RESM_CHANNELS)
+#error USB_ADC_MIC_CHANNELS must match MIC_RESM_CHANNELS
+#endif
 
 #define AUDIO_IN_EP       0x81
 #define AUDIO_IN_CLOCK_ID 0x01
@@ -80,7 +101,11 @@ static const uint8_t config_descriptor[] =
 {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
     AUDIO_V2_AC_DESCRIPTOR_INIT(0x00, 0x02, AUDIO_AC_SIZ, AUDIO_CATEGORY_MICROPHONE, 0x00, 0x00),
+#if USB_ADC_MIC_MULTI_RATE
+    AUDIO_V2_AC_CLOCK_SOURCE_DESCRIPTOR_INIT(AUDIO_IN_CLOCK_ID, 0x03, 0x03),
+#else
     AUDIO_V2_AC_CLOCK_SOURCE_DESCRIPTOR_INIT(AUDIO_IN_CLOCK_ID, 0x01, 0x01),
+#endif
     AUDIO_V2_AC_INPUT_TERMINAL_DESCRIPTOR_INIT(0x02, AUDIO_INTERM_MIC, AUDIO_IN_CLOCK_ID,
                                                USB_ADC_MIC_CHANNELS, INPUT_CH_ENABLE, 0x0000),
     AUDIO_V2_AC_FEATURE_UNIT_DESCRIPTOR_INIT(AUDIO_IN_FU_ID, 0x02, INPUT_CTRL),
@@ -113,13 +138,38 @@ static const char *string_descriptors[] =
     "2026090504",
 };
 
+/* One sub-range per advertised rate: dMin == dMax and dRes == 0 makes it a
+ * discrete point. The sub-range count goes in the table's first two bytes and
+ * usbd_audio.c copies exactly 12 * num + 2 bytes from it, so the table length
+ * has to match the count - the assert below catches a mismatch at compile time. */
+#define MIC_RATE_ENTRY(r)                        \
+    AUDIO_SAMPLE_FREQ_4B(r),                     \
+    AUDIO_SAMPLE_FREQ_4B(r),                     \
+    AUDIO_SAMPLE_FREQ_4B(0U)
+
+#if (USB_ADC_MIC_MULTI_RATE)
+#define MIC_RATE_NUM 4U
+
 static const uint8_t mic_default_sampling_freq_table[] =
 {
-    AUDIO_SAMPLE_FREQ_NUM(1),
-    AUDIO_SAMPLE_FREQ_4B(USB_ADC_MIC_SAMPLE_RATE),
-    AUDIO_SAMPLE_FREQ_4B(USB_ADC_MIC_SAMPLE_RATE),
-    AUDIO_SAMPLE_FREQ_4B(0x00),
+    AUDIO_SAMPLE_FREQ_NUM(MIC_RATE_NUM),
+    MIC_RATE_ENTRY(8000U),  /* the capture rate, sent as-is */
+    MIC_RATE_ENTRY(16000U), /* 2x */
+    MIC_RATE_ENTRY(32000U), /* 2x -> 2x */
+    MIC_RATE_ENTRY(48000U), /* 2x -> 3x */
 };
+#else
+#define MIC_RATE_NUM 1U
+
+static const uint8_t mic_default_sampling_freq_table[] =
+{
+    AUDIO_SAMPLE_FREQ_NUM(MIC_RATE_NUM),
+    MIC_RATE_ENTRY(USB_ADC_MIC_MAX_RATE),
+};
+#endif
+
+_Static_assert(sizeof(mic_default_sampling_freq_table) == 12 * MIC_RATE_NUM + 2U,
+               "the sampling frequency table must be 12 * MIC_RATE_NUM + 2 bytes");
 
 static rt_device_t s_mic_dev;
 static bool s_mic_dev_open;
@@ -128,12 +178,19 @@ static volatile bool s_streaming;
 static volatile bool s_ep_tx_busy;
 static volatile bool s_usb_tx_worker_inited;
 static uint8_t s_usb_busid;
-static volatile uint32_t s_mic_sample_rate = USB_ADC_MIC_SAMPLE_RATE;
+static volatile uint32_t s_mic_sample_rate = USB_ADC_MIC_MAX_RATE;
 
 static volatile bool s_usb_mute_state[USB_ADC_MIC_CHANNELS + 1U];
 static volatile int s_usb_volume_db[USB_ADC_MIC_CHANNELS + 1U];
 
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_usb_tx_buffer[USB_ADC_MIC_PACKET_BYTES];
+static int16_t s_capture_samples[USB_ADC_MIC_CAPTURE_FRAMES * USB_ADC_MIC_AUDIO_SLOT_BYTES / sizeof(int16_t)];
+
+/* One resampler, configured for the negotiated rate. Only the TX thread touches it. */
+static mic_resampler_t s_resampler;
+static uint32_t s_resample_rate_used;
+static volatile bool s_resampler_pending_deinit;
+
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t s_usb_tx_buffer[USB_ADC_MIC_MAX_PACKET_BYTES];
 static struct rt_semaphore s_usb_tx_sem;
 static struct rt_thread s_usb_tx_thread;
 rt_align(RT_ALIGN_SIZE) static rt_uint8_t s_usb_tx_thread_stack[USB_ADC_MIC_TX_THREAD_STACK_SIZE];
@@ -246,16 +303,15 @@ static void usb_adc_mic_kick_tx(void)
     }
 }
 
-/* Standard record consumer: find -> open -> AUDIO_CTL_CONFIGURE -> read, the
- * sequence wavrecorder.c uses. rt_device_open() here is allocation free:
- * rt_audio_register() already ran _audio_dev_init() at device init level 3 and
- * set RT_DEVICE_FLAG_ACTIVATED, so rt_device_open() only flips flags, bumps the
- * ref_count and calls ops->start(). That matters because this runs from
- * USBD_IRQHandler via usbd_audio_open().
+/* Standard record consumer: find -> open -> AUDIO_CTL_CONFIGURE -> read.
+ * rt_device_open() here is allocation free: rt_audio_register() already ran
+ * _audio_dev_init() at device init level 3 and set RT_DEVICE_FLAG_ACTIVATED, so
+ * rt_device_open() only flips flags, bumps the ref_count and calls ops->start().
+ * That matters because this runs from USBD_IRQHandler via usbd_audio_open().
  *
- * The CONFIGURE result is ignored, as wavrecorder.c does: drv_mic.c rejects
- * anything but 16000 Hz / 3 ch / 16 bit and the descriptor advertises exactly
- * that, so the two cannot drift. */
+ * The CONFIGURE result is ignored: drv_mic.c rejects anything but 8 kHz /
+ * 3 ch / 16 bit and the capture path is configured for exactly that. The rate
+ * the host negotiates only changes the resampling stage downstream of here. */
 static bool usb_adc_mic_mic_open(void)
 {
     struct rt_audio_caps caps;
@@ -285,7 +341,7 @@ static bool usb_adc_mic_mic_open(void)
     rt_memset(&caps, 0, sizeof(caps));
     caps.main_type = AUDIO_TYPE_INPUT;
     caps.sub_type = AUDIO_DSP_PARAM;
-    caps.udata.config.samplerate = USB_ADC_MIC_SAMPLE_RATE;
+    caps.udata.config.samplerate = USB_ADC_MIC_CAPTURE_RATE;
     caps.udata.config.channels = USB_ADC_MIC_CHANNELS;
     caps.udata.config.samplebits = USB_ADC_MIC_BITS_PER_SAMPLE;
     (void)rt_device_control(s_mic_dev, AUDIO_CTL_CONFIGURE, &caps);
@@ -323,11 +379,49 @@ static void usb_adc_mic_stop_stream(void)
     s_streaming = false;
     usb_adc_mic_mic_close();
     s_ep_tx_busy = false;
+    /* Deinit must run on the TX thread; flag it and wake the thread. */
+    s_resampler_pending_deinit = true;
+    usb_adc_mic_kick_tx();
+}
+
+/* (Re)configure the resampler for a negotiated rate. */
+static bool usb_adc_mic_setup_resampler(uint32_t out_rate)
+{
+    if (mic_resampler_init(&s_resampler, USB_ADC_MIC_CAPTURE_RATE, out_rate) != 0)
+    {
+        USB_LOG_ERR("ADC MIC resample %u->%u Hz unsupported\r\n",
+                    (unsigned)USB_ADC_MIC_CAPTURE_RATE, (unsigned)out_rate);
+        return false;
+    }
+
+    s_resample_rate_used = out_rate;
+    return true;
+}
+
+/* Turn one 1 ms capture frame into the packet for the negotiated rate.
+ * Returns the number of bytes written to s_usb_tx_buffer. */
+static uint32_t usb_adc_mic_render(const int16_t *capture)
+{
+    uint32_t frames = mic_resampler_process(&s_resampler, capture,
+                                            USB_ADC_MIC_CAPTURE_FRAMES,
+                                            (int16_t *)s_usb_tx_buffer);
+
+    return frames * USB_ADC_MIC_AUDIO_SLOT_BYTES;
 }
 
 static void usb_adc_mic_try_send(uint8_t busid)
 {
     int ret;
+    rt_size_t got;
+    uint32_t out_rate;
+    uint32_t out_bytes;
+
+    if (s_resampler_pending_deinit)
+    {
+        s_resampler_pending_deinit = false;
+        mic_resampler_deinit(&s_resampler);
+        s_resample_rate_used = 0U;
+    }
 
     if (!s_streaming)
     {
@@ -338,16 +432,37 @@ static void usb_adc_mic_try_send(uint8_t busid)
         return;
     }
 
-    /* rt_device_read() blocks on the record pipe's RT_PIPE_FLAG_BLOCK_RD, which
-     * is fine here: this runs on the TX thread, not in an interrupt. */
-    rt_memset(s_usb_tx_buffer, 0, sizeof(s_usb_tx_buffer));
+    out_rate = s_mic_sample_rate;
+
+    if (s_resample_rate_used != out_rate)
+    {
+        if (!usb_adc_mic_setup_resampler(out_rate))
+        {
+            /* Keep the last valid rate and drop this frame. */
+            return;
+        }
+    }
+
+    rt_memset(s_capture_samples, 0, sizeof(s_capture_samples));
     if (s_mic_dev_open)
     {
-        (void)rt_device_read(s_mic_dev, 0, s_usb_tx_buffer, sizeof(s_usb_tx_buffer));
+        got = rt_device_read(s_mic_dev, 0, s_capture_samples, sizeof(s_capture_samples));
+        if (got != sizeof(s_capture_samples))
+        {
+            USB_LOG_ERR("ADC MIC short capture read: %u/%u bytes\r\n",
+                        (unsigned)got, (unsigned)sizeof(s_capture_samples));
+        }
+    }
+
+    out_bytes = usb_adc_mic_render(s_capture_samples);
+
+    if (out_bytes == 0U)
+    {
+        return;
     }
 
     s_ep_tx_busy = true;
-    ret = usbd_ep_start_write(busid, AUDIO_IN_EP, s_usb_tx_buffer, sizeof(s_usb_tx_buffer));
+    ret = usbd_ep_start_write(busid, AUDIO_IN_EP, s_usb_tx_buffer, out_bytes);
     if (ret < 0)
     {
         s_ep_tx_busy = false;
@@ -402,18 +517,34 @@ void usbd_audio_close(uint8_t busid, uint8_t intf)
     usb_adc_mic_stop_stream();
 }
 
+static bool usb_adc_mic_rate_supported(uint32_t rate)
+{
+#if (USB_ADC_MIC_MULTI_RATE)
+    return (rate == 8000U) || (rate == 16000U) || (rate == 32000U) || (rate == 48000U);
+#else
+    return (rate == USB_ADC_MIC_MAX_RATE);
+#endif
+}
+
 void usbd_audio_set_sampling_freq(uint8_t busid, uint8_t ep, uint32_t sampling_freq)
 {
     (void)busid;
 
-    if (ep == AUDIO_IN_EP)
+    if (ep != AUDIO_IN_EP)
     {
-        if (sampling_freq != USB_ADC_MIC_SAMPLE_RATE)
-        {
-            USB_LOG_ERR("ADC MIC only supports %u Hz\r\n", USB_ADC_MIC_SAMPLE_RATE);
-        }
-        s_mic_sample_rate = USB_ADC_MIC_SAMPLE_RATE;
+        return;
     }
+
+    if (!usb_adc_mic_rate_supported(sampling_freq))
+    {
+        /* Not in the advertised table; keep the last valid rate rather than
+         * changing the stream under the host. */
+        USB_LOG_ERR("ADC MIC rate %u Hz not supported\r\n", (unsigned)sampling_freq);
+        return;
+    }
+
+    s_mic_sample_rate = sampling_freq;
+    USB_LOG_RAW("ADC MIC rate %u Hz\r\n", (unsigned)sampling_freq);
 }
 
 uint32_t usbd_audio_get_sampling_freq(uint8_t busid, uint8_t ep)
@@ -521,8 +652,10 @@ static struct audio_entity_info audio_entity_table[] =
 
 void usb_adc_mic_init(uint8_t busid, uintptr_t reg_base)
 {
-    s_mic_sample_rate = USB_ADC_MIC_SAMPLE_RATE;
-
+    /* Default to the widest advertised rate: it matches the descriptor's
+     * wMaxPacketSize, so a host that never issues SET_CUR still gets a
+     * self-consistent stream. */
+    s_mic_sample_rate = USB_ADC_MIC_MAX_RATE;
 
     (void)usb_adc_mic_tx_worker_init(busid);
 

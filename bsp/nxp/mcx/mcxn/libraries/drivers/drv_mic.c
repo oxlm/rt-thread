@@ -12,7 +12,7 @@
  * interleaved one millisecond at a time, then pushed into the record pipe as
  * one 16 bit little-endian frame per channel.
  *
- * The stream format is fixed: 16000 Hz, 3 channels, 16 bits. Everything that
+ * The stream format is fixed: 8000 Hz, 3 channels, 16 bits. Everything that
  * produces it (CTIMER period, LPADC trigger, DMA block size, packet length) is
  * a constant, so configure() reports that rather than applying a change.
  */
@@ -71,9 +71,9 @@
  * The coefficients are not written by hand: drv_mic_calc_hpf_coeffs() derives
  * them from fc and the sample rate with a prewarped bilinear transform of the
  * analog prototype H(s) = s/(s + w_a), which makes the whole filter reproducible
- * from DRV_MIC_HPF_CUTOFF_HZ alone. For fc = 5 Hz, fs = 16 kHz that is
- * a = 0.998038 and b0 = 0.999019, and the response is
- * -3 dB at 5.012 Hz, -0.26 dB at 20 Hz, -0.04 dB at 50 Hz, -0.02 dB at 80 Hz,
+ * from DRV_MIC_HPF_CUTOFF_HZ alone. For fc = 5 Hz, fs = 8 kHz that is
+ * a = 0.996081 and b0 = 0.998040, and the response is
+ * -3 dB at 5.0 Hz, -0.26 dB at 20 Hz, -0.04 dB at 50 Hz, -0.02 dB at 80 Hz,
  * -0.003 dB at 200 Hz and 0 dB at Nyquist, so voice content (roughly 80 Hz and
  * up) passes through uncut. A DC step settles after about 5 tau = 160 ms
  * (tau = 1/(2*pi*fc) = 31.8 ms). */
@@ -98,7 +98,7 @@
 #define DRV_MIC_OPAMP_GAIN kOPAMP_PosGainNonInvert1X
 #endif
 
-#define DRV_MIC_HW_AVG        kLPADC_HardwareAverageCount8
+#define DRV_MIC_HW_AVG        kLPADC_HardwareAverageCount16
 #define DRV_MIC_SAMPLE_TIME   kLPADC_SampleTimeADCK35
 
 struct drv_mic_dev

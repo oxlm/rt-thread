@@ -12,7 +12,7 @@
 #define __DRV_MIC_H__
 
 #define DRV_MIC_NAME             "mic0"
-#define DRV_MIC_SAMPLE_RATE      16000U
+#define DRV_MIC_SAMPLE_RATE      8000U
 #define DRV_MIC_CHANNELS         3U
 #define DRV_MIC_SAMPLE_BITS      16U
 #define DRV_MIC_BYTES_PER_SAMPLE 2U
