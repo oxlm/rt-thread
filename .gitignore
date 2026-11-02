@@ -71,3 +71,20 @@ vdso.lds
 
 # mac
 .DS_Store
+# Added by code-review-graph
+.code-review-graph/
+.claude/
+.codebuddy/
+.gemini/
+.hooks/
+.kiro/
+.qoder/
+CLAUDE.md
+CODEBUDDY.md
+GEMINI.md
+QODER.md
+.mcp.json
+.windsurfrules
+AGENTS.md
+opencode.jsonc
+.cursorrules
