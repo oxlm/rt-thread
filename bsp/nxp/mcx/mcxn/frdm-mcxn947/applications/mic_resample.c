@@ -174,24 +174,19 @@ static uint32_t resm_stage_run(struct mic_resm_stage *st, const float *in,
 
         for (p = 0U; p < L; p++)
         {
-            float acc0 = 0.0f;
-            float acc1 = 0.0f;
-            float acc2 = 0.0f;
             const float *hp = h + (size_t)p * taps;
             uint32_t oidx = (i * (uint32_t)L + p) * MIC_RESM_CHANNELS;
 
-            for (k = 0U; k < taps; k++)
+            for (c = 0U; c < MIC_RESM_CHANNELS; c++)
             {
-                float ck = hp[k];
+                float acc = 0.0f;
 
-                acc0 += ck * st->st[0][k];
-                acc1 += ck * st->st[1][k];
-                acc2 += ck * st->st[2][k];
+                for (k = 0U; k < taps; k++)
+                {
+                    acc += hp[k] * st->st[c][k];
+                }
+                out[oidx + c] = acc;
             }
-
-            out[oidx + 0] = acc0;
-            out[oidx + 1] = acc1;
-            out[oidx + 2] = acc2;
         }
     }
 

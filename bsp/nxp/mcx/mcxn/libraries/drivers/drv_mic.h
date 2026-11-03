@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-09-22     RT-Thread    three-channel ADC microphone audio device
+ * 2026-11-03     RT-Thread    separate physical axes from mono output
  */
 
 #ifndef __DRV_MIC_H__
@@ -13,7 +14,8 @@
 
 #define DRV_MIC_NAME             "mic0"
 #define DRV_MIC_SAMPLE_RATE      8000U
-#define DRV_MIC_CHANNELS         3U
+#define DRV_MIC_INPUT_CHANNELS   3U
+#define DRV_MIC_CHANNELS         1U
 #define DRV_MIC_SAMPLE_BITS      16U
 #define DRV_MIC_BYTES_PER_SAMPLE 2U
 #define DRV_MIC_SAMPLES_PER_MS   (DRV_MIC_SAMPLE_RATE / 1000U)

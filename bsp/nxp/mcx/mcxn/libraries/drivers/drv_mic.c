@@ -6,13 +6,13 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-09-22     RT-Thread    three-channel ADC microphone audio device
+ * 2026-11-03     RT-Thread    use mic_algo for three-axis to mono processing
  *
  * ADC0 side A + ADC1 side A + ADC1 side B, hardware-triggered by CTIMER0 and
- * drained by three loop EDMA channels. The three raw streams are de-DC'd and
- * interleaved one millisecond at a time, then pushed into the record pipe as
- * one 16 bit little-endian frame per channel.
+ * drained by three loop EDMA channels. mic_algo consumes synchronized raw XYZ
+ * triplets and produces one signed mono sample per triplet for the record pipe.
  *
- * The stream format is fixed: 8000 Hz, 3 channels, 16 bits. Everything that
+ * The stream format is fixed: 8000 Hz, 1 channel, 16 bits. Everything that
  * produces it (CTIMER period, LPADC trigger, DMA block size, packet length) is
  * a constant, so configure() reports that rather than applying a change.
  */
@@ -27,7 +27,6 @@
 
 #ifdef BSP_USING_ADC_MIC
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -44,6 +43,11 @@
 
 #include "drivers/dev_audio.h"
 #include "drv_mic.h"
+#include "mic_algo.h"
+
+#if DRV_MIC_INPUT_CHANNELS != MIC_ALGO_AXES
+#error ADC input count must match the algorithm axes
+#endif
 
 #define DRV_MIC_DMA_BLOCKS 8U
 
@@ -58,28 +62,38 @@
 #define DRV_MIC_USE_OPAMP 0
 #endif
 
-/* One-pole high-pass filter on the ADC path, feeding the backend directly. It
- * is the DC blocker here: with kLPADC_ReferenceVoltageAlt3 the LPADC spans
- * 0..VDD_ANA, so 0 V is the bottom of its range, and there is no VREF/2 bias
- * network on the input (DRV_MIC_USE_OPAMP is 0), so the DC has to be removed
- * in software.
- *
- * The 16 bit ADC_RESFIFO_D field goes in rather than a raw-32768 PCM value: the
- * filter only ever sees x[n]-x[n-1], so the DC offset of the 0..VDD_ANA range
- * cancels in the difference.
- *
- * The coefficients are not written by hand: drv_mic_calc_hpf_coeffs() derives
- * them from fc and the sample rate with a prewarped bilinear transform of the
- * analog prototype H(s) = s/(s + w_a), which makes the whole filter reproducible
- * from DRV_MIC_HPF_CUTOFF_HZ alone. For fc = 5 Hz, fs = 8 kHz that is
- * a = 0.996081 and b0 = 0.998040, and the response is
- * -3 dB at 5.0 Hz, -0.26 dB at 20 Hz, -0.04 dB at 50 Hz, -0.02 dB at 80 Hz,
- * -0.003 dB at 200 Hz and 0 dB at Nyquist, so voice content (roughly 80 Hz and
- * up) passes through uncut. A DC step settles after about 5 tau = 160 ms
- * (tau = 1/(2*pi*fc) = 31.8 ms). */
-#define DRV_MIC_HPF_CUTOFF_HZ 5.0f
-#define DRV_MIC_PI            3.141592653589793f
 #define DRV_MIC_CTIMER_MATCH_RATE DRV_MIC_SAMPLE_RATE
+
+/* Initial ADXL354 settings only: 3.3 V ADC reference, 1.8 V sensor analog
+ * supply, +/-2 g range, and DMA inputs ordered X,Y,Z. Replace zero_adc and
+ * counts_per_g with six-face board measurements. The default mounting normal
+ * is +Z (sensor PCB against the neck); verify the actual wiring and placement.
+ * A mounting normal parallel to gravity deliberately fades to silence.
+ * These values are not a measured calibration or a tuned neck-motion model. */
+#define DRV_MIC_ADC_COUNTS_PER_V (65535.0f / 3.3f)
+
+static const mic_algo_config_t s_mic_algo_config =
+{
+    .sample_rate = DRV_MIC_SAMPLE_RATE,
+    .startup_ms = 200U,
+    .zero_adc = {0.9f * DRV_MIC_ADC_COUNTS_PER_V,
+                 0.9f * DRV_MIC_ADC_COUNTS_PER_V,
+                 0.9f * DRV_MIC_ADC_COUNTS_PER_V},
+    .counts_per_g = {0.4f * DRV_MIC_ADC_COUNTS_PER_V,
+                     0.4f * DRV_MIC_ADC_COUNTS_PER_V,
+                     0.4f * DRV_MIC_ADC_COUNTS_PER_V},
+    .mount_direction = {0.0f, 0.0f, 1.0f},
+    .gravity_cutoff_hz = 1.0f,
+    .gravity_min_g = 0.7f,
+    .gravity_max_g = 1.3f,
+    .motion_rms_g = 0.1f,
+    .min_projection = 0.15f,
+    .highpass_hz = 5.0f,
+    .lowpass_hz = 0.0f, /* Preserve the existing audio bandwidth until measured. */
+    .fade_ms = 20.0f,
+    .pcm_per_g = 0.4f * DRV_MIC_ADC_COUNTS_PER_V,
+    .gain = 1.0f,
+};
 
 /* LPADC channel numbers for ADC0_A2 + ADC1_A0 + ADC1_B0. */
 #ifndef DRV_MIC_ADC0_A_CHANNEL
@@ -114,23 +128,8 @@ static struct drv_mic_dev s_mic_dev;
  * stopped, so a callback never observes a tearing value. */
 static volatile bool s_capturing;
 
-/* Per-channel filter state: the previous input and the previous output, both
- * stored as float so the feedback path carries the full unquantized value. The
- * int16 quantization happens only at the output of drv_mic_hpf(), so its
- * rounding error never feeds back and cannot accumulate into a DC offset.
- *
- * drv_mic_hpf() only runs from the eDMA callback while s_capturing is true,
- * and drv_mic_reset_state() only from drv_mic_start() while it is false, so the
- * two never overlap and no locking is needed. Deliberately not volatile: only
- * the CPU touches these, unlike s_adc*_samples[] which the DMA writes. */
-static float s_hpf_prev_in[DRV_MIC_CHANNELS];
-static float s_hpf_prev_out[DRV_MIC_CHANNELS];
-
-/* Coefficients are derived once when the device is opened (drv_mic_init) and
- * then only multiplied by drv_mic_hpf() in the eDMA callback, so no volatile
- * is needed: nothing rewrites them while a transfer is running. */
-static float s_hpf_alpha;
-static float s_hpf_gain;
+/* Access is serialized with the DMA callback; no allocation on USB open/close. */
+static mic_algo_t s_mic_algo;
 
 AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc0_a_samples[DRV_MIC_DMA_BLOCKS][DRV_MIC_SAMPLES_PER_MS], 4U);
 AT_NONCACHEABLE_SECTION_ALIGN(static volatile uint32_t s_adc1_a_samples[DRV_MIC_DMA_BLOCKS][DRV_MIC_SAMPLES_PER_MS], 4U);
@@ -142,12 +141,12 @@ AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc0_a_tcd[DRV_MIC_DMA_BLOCKS]
 AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc1_a_tcd[DRV_MIC_DMA_BLOCKS], EDMA_TCD_ALIGN_SIZE);
 AT_NONCACHEABLE_SECTION_ALIGN(static edma_tcd_t s_adc1_b_tcd[DRV_MIC_DMA_BLOCKS], EDMA_TCD_ALIGN_SIZE);
 
-static edma_handle_t s_dma_handle[DRV_MIC_CHANNELS];
-static edma_transfer_config_t s_dma_transfer[DRV_MIC_CHANNELS][DRV_MIC_DMA_BLOCKS];
-static volatile uint32_t s_dma_done_count[DRV_MIC_CHANNELS];
+static edma_handle_t s_dma_handle[DRV_MIC_INPUT_CHANNELS];
+static edma_transfer_config_t s_dma_transfer[DRV_MIC_INPUT_CHANNELS][DRV_MIC_DMA_BLOCKS];
+static volatile uint32_t s_dma_done_count[DRV_MIC_INPUT_CHANNELS];
 static volatile uint32_t s_mixed_count;
 
-static const volatile uint32_t * const s_adc_sample_src[DRV_MIC_CHANNELS] = {
+static const volatile uint32_t * const s_adc_sample_src[DRV_MIC_INPUT_CHANNELS] = {
     &s_adc0_a_samples[0][0],
     &s_adc1_a_samples[0][0],
     &s_adc1_b_samples[0][0],
@@ -163,95 +162,32 @@ static void drv_mic_prepare_dma_ring(edma_handle_t *handle,
                                      void *callback_user_data);
 static bool drv_mic_start_dma_ring(edma_handle_t *handle, edma_transfer_config_t *transfer);
 
-/* Prewarped bilinear transform of the analog prototype H(s) = s/(s + w_a) with
- * w_a = fs * tan(pi * fc / fs). Substituting s = fs * (1 - z^-1) / (1 + z^-1)
- * and collecting terms gives
- *     y[n] = a * y[n-1] + b0 * (x[n] - x[n-1])
- *         a  = (fs - w_a) / (fs + w_a)
- *         b0 = fs / (fs + w_a)   == (1 + a) / 2, unity gain at Nyquist
- * Both are stored as float. Runs once per open, so the float cost never
- * touches the sampling path. */
-static void drv_mic_calc_hpf_coeffs(void)
-{
-    float fs;
-    float w_a;
-
-    fs = (float)DRV_MIC_SAMPLE_RATE;
-    w_a = fs * tanf(DRV_MIC_PI * DRV_MIC_HPF_CUTOFF_HZ / fs);
-
-    s_hpf_alpha = (fs - w_a) / (fs + w_a);
-    s_hpf_gain  = fs / (fs + w_a);
-
-    LOG_I("hpf fc=%.1f Hz: a=%.6f b0=%.6f\n",
-          (double)DRV_MIC_HPF_CUTOFF_HZ,
-          (double)s_hpf_alpha,
-          (double)s_hpf_gain);
-}
-
-/* One-pole high-pass, direct form:
- *     y[n] = a * y[n-1] + b0 * (x[n] - x[n-1])
- * with H(z) = b0 * (1 - z^-1) / (1 - a * z^-1), so |H(pi)| = 2*b0/(1+a) = 1.0.
- *
- * x is the 16 bit ADC_RESFIFO_D field, 0..65535. The FIFO metadata above bit 15
- * (command source, loop count, valid) is stripped before it gets here, so a
- * change in any of those fields cannot reach the arithmetic.
- *
- * All internal arithmetic is float. The key point is that prev_out stores the
- * unquantized float y, not the int16 output. Output quantization noise stays
- * local to that sample and does not feed back through the a = 0.998 loop,
- * which is why a DC step settles to float-precision zero instead of stalling
- * at half a count.
- *
- * The clip is the only place int16 is applied. A full-range DC step pushes
- * y[0] = b0 * 65535 = 65471, which is clamped to 32767 and decays from there;
- * |H(pi)| = 1 means a steady full-scale square wave peaks exactly at 32767 and
- * does not clip. */
-static int16_t drv_mic_hpf(uint16_t raw, uint32_t ch)
-{
-    float diff;
-    float y;
-
-    diff = (float)raw - s_hpf_prev_in[ch];
-    s_hpf_prev_in[ch] = (float)raw;
-
-    y = s_hpf_alpha * s_hpf_prev_out[ch] + s_hpf_gain * diff;
-    s_hpf_prev_out[ch] = y;
-
-    if (y > 32767.0f)
-    {
-        y = 32767.0f;
-    }
-    else if (y < -32768.0f)
-    {
-        y = -32768.0f;
-    }
-
-    return (int16_t)lrintf(y);
-}
-
 static void drv_mic_mix_block(uint32_t block)
 {
-    uint8_t pcm[DRV_MIC_PACKET_BYTES];
-    uint8_t *dst;
+    uint16_t xyz[DRV_MIC_SAMPLES_PER_MS * DRV_MIC_INPUT_CHANNELS];
+    int16_t mono[DRV_MIC_SAMPLES_PER_MS];
+    uint32_t frame;
+    uint32_t axis;
 
-    dst = pcm;
-    for (uint32_t i = 0U; i < DRV_MIC_SAMPLES_PER_MS; i++)
+    for (frame = 0U; frame < DRV_MIC_SAMPLES_PER_MS; frame++)
     {
-        for (uint32_t ch = 0U; ch < DRV_MIC_CHANNELS; ch++)
+        for (axis = 0U; axis < DRV_MIC_INPUT_CHANNELS; axis++)
         {
-            const volatile uint32_t *src;
-            int16_t sample;
+            const volatile uint32_t *src = s_adc_sample_src[axis] +
+                                           block * DRV_MIC_SAMPLES_PER_MS;
 
-            src = s_adc_sample_src[ch] + (block * DRV_MIC_SAMPLES_PER_MS);
-            sample = drv_mic_hpf((uint16_t)ADC_RESFIFO_D(src[i]), ch);
-            *dst++ = (uint8_t)(sample & 0xff);
-            *dst++ = (uint8_t)(((uint16_t)sample >> 8) & 0xff);
+            xyz[frame * DRV_MIC_INPUT_CHANNELS + axis] =
+                (uint16_t)ADC_RESFIFO_D(src[frame]);
         }
     }
-
-    /* rt_audio_rx_done() writes to the record pipe with RT_PIPE_FLAG_FORCE_WR,
-     * so a full pipe drops the oldest frame instead of blocking this callback. */
-    rt_audio_rx_done(&s_mic_dev.audio, pcm, sizeof(pcm));
+    if (mic_algo_process(&s_mic_algo, xyz, DRV_MIC_SAMPLES_PER_MS, mono,
+                         DRV_MIC_SAMPLES_PER_MS) != (int)DRV_MIC_SAMPLES_PER_MS)
+    {
+        memset(mono, 0, sizeof(mono));
+    }
+    /* Cortex-M33 PCM is little-endian. The audio record pipe copies this block
+     * synchronously and drops the oldest block if its buffer is full. */
+    rt_audio_rx_done(&s_mic_dev.audio, (rt_uint8_t *)mono, sizeof(mono));
 }
 
 static uint32_t drv_mic_min_done_count(void)
@@ -275,16 +211,21 @@ static void drv_mic_dma_callback(edma_handle_t *handle, void *userData, bool tra
 {
     uint32_t dma_index;
     uint32_t done_blocks;
+    rt_base_t level;
 
     (void)handle;
 
     dma_index = (uint32_t)(uintptr_t)userData;
-    if (dma_index >= DRV_MIC_CHANNELS)
+    if (dma_index >= DRV_MIC_INPUT_CHANNELS)
     {
         return;
     }
+    /* USB open/close can run in an interrupt too. Prevent it from resetting
+     * the algorithm while process() is using its context. */
+    level = rt_hw_interrupt_disable();
     if (!s_capturing)
     {
+        rt_hw_interrupt_enable(level);
         return;
     }
 
@@ -293,6 +234,7 @@ static void drv_mic_dma_callback(edma_handle_t *handle, void *userData, bool tra
     {
         if (!transferDone)
         {
+            rt_hw_interrupt_enable(level);
             return;
         }
         done_blocks = 1U;
@@ -307,10 +249,11 @@ static void drv_mic_dma_callback(edma_handle_t *handle, void *userData, bool tra
         drv_mic_mix_block(block);
         s_mixed_count++;
     }
+    rt_hw_interrupt_enable(level);
 }
 
 /* drv_mic_start() runs with s_capturing false and no DMA loop armed, so the
- * counters and filter state can be zeroed under interrupt disable without a
+ * counters can be zeroed under interrupt disable without a
  * real race. */
 static void drv_mic_reset_state(void)
 {
@@ -321,11 +264,6 @@ static void drv_mic_reset_state(void)
     s_dma_done_count[1] = 0U;
     s_dma_done_count[2] = 0U;
     s_mixed_count = 0U;
-    for (uint32_t ch = 0U; ch < DRV_MIC_CHANNELS; ch++)
-    {
-        s_hpf_prev_in[ch] = 0;
-        s_hpf_prev_out[ch] = 0;
-    }
     rt_hw_interrupt_enable(level);
 }
 
@@ -559,8 +497,6 @@ static rt_err_t drv_mic_init(struct rt_audio_device *audio)
 {
     RT_ASSERT(audio != RT_NULL);
 
-    drv_mic_calc_hpf_coeffs();
-
     CLOCK_EnableClock(kCLOCK_InputMux);
     CLOCK_EnableClock(kCLOCK_Dma0);
     CLOCK_AttachClk(kFRO12M_to_ADC0);
@@ -721,7 +657,16 @@ static rt_err_t drv_mic_start(struct rt_audio_device *audio, int stream)
     }
 
     s_capturing = false;
+    CTIMER_StopTimer(CTIMER0);
+    EDMA_AbortTransfer(&s_dma_handle[0]);
+    EDMA_AbortTransfer(&s_dma_handle[1]);
+    EDMA_AbortTransfer(&s_dma_handle[2]);
     drv_mic_reset_state();
+    if (mic_algo_init(&s_mic_algo, &s_mic_algo_config) != 0)
+    {
+        LOG_E("invalid microphone algorithm configuration");
+        return -RT_EINVAL;
+    }
 
     LPADC_DoResetFIFO0(ADC0);
     LPADC_DoResetFIFO0(ADC1);
@@ -729,17 +674,20 @@ static rt_err_t drv_mic_start(struct rt_audio_device *audio, int stream)
 
     if (!drv_mic_start_dma_ring(&s_dma_handle[0], &s_dma_transfer[0][0]))
     {
+        mic_algo_deinit(&s_mic_algo);
         return -RT_ERROR;
     }
     if (!drv_mic_start_dma_ring(&s_dma_handle[1], &s_dma_transfer[1][0]))
     {
         EDMA_AbortTransfer(&s_dma_handle[0]);
+        mic_algo_deinit(&s_mic_algo);
         return -RT_ERROR;
     }
     if (!drv_mic_start_dma_ring(&s_dma_handle[2], &s_dma_transfer[2][0]))
     {
         EDMA_AbortTransfer(&s_dma_handle[0]);
         EDMA_AbortTransfer(&s_dma_handle[1]);
+        mic_algo_deinit(&s_mic_algo);
         return -RT_ERROR;
     }
 
@@ -774,6 +722,7 @@ static rt_err_t drv_mic_stop(struct rt_audio_device *audio, int stream)
     LPADC_DoResetFIFO0(ADC1);
     LPADC_DoResetFIFO1(ADC1);
 
+    mic_algo_deinit(&s_mic_algo);
     LOG_D("stop adc mic record");
     return RT_EOK;
 }

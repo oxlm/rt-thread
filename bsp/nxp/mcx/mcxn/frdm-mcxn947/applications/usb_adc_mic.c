@@ -6,6 +6,7 @@
  * Change Logs:
  * Date           Author       Notes
  * 2026-09-05     RT-Thread    three-channel ADC USB microphone
+ * 2026-11-03     RT-Thread    advertise and transmit processed mono PCM
  */
 
 #include <rtthread.h>
@@ -75,8 +76,12 @@
 #define AUDIO_IN_FU_ID    0x03
 
 #define BMCONTROL       (AUDIO_V2_CONTROL_MUTE | AUDIO_V2_CONTROL_VOLUME)
-#define INPUT_CTRL      DBVAL(BMCONTROL), DBVAL(BMCONTROL), DBVAL(BMCONTROL), DBVAL(BMCONTROL)
-#define INPUT_CH_ENABLE 0x00000007
+#if USB_ADC_MIC_CHANNELS != 1U
+#error This USB microphone descriptor requires mono PCM
+#endif
+/* Master and mono channel controls; front-center channel position. */
+#define INPUT_CTRL      DBVAL(BMCONTROL), DBVAL(BMCONTROL)
+#define INPUT_CH_ENABLE 0x00000004
 
 #define USB_CONFIG_SIZE (9 +                                                                  \
                          AUDIO_V2_AC_DESCRIPTOR_LEN +                                         \
@@ -115,6 +120,9 @@ static const uint8_t config_descriptor[] =
                                 USB_ADC_MIC_BYTES_PER_SAMPLE, USB_ADC_MIC_BITS_PER_SAMPLE,
                                 AUDIO_IN_EP, 0x05, USB_ADC_MIC_EP_MAX_PACKET_BYTES, EP_INTERVAL)
 };
+
+_Static_assert(sizeof(config_descriptor) == USB_CONFIG_SIZE,
+               "USB configuration length must match its descriptors");
 
 static const uint8_t device_quality_descriptor[] =
 {
@@ -310,7 +318,7 @@ static void usb_adc_mic_kick_tx(void)
  * That matters because this runs from USBD_IRQHandler via usbd_audio_open().
  *
  * The CONFIGURE result is ignored: drv_mic.c rejects anything but 8 kHz /
- * 3 ch / 16 bit and the capture path is configured for exactly that. The rate
+ * 1 ch / 16 bit and the capture path is configured for exactly that. The rate
  * the host negotiates only changes the resampling stage downstream of here. */
 static bool usb_adc_mic_mic_open(void)
 {

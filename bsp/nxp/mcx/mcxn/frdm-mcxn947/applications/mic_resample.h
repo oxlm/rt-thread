@@ -13,9 +13,10 @@
 #define __MIC_RESMAMPLE_H__
 
 #include <stdint.h>
+#include "drv_mic.h"
 
 /* Channels are interleaved (frame-major), matching the driver's record pipe. */
-#define MIC_RESM_CHANNELS  3U
+#define MIC_RESM_CHANNELS  DRV_MIC_CHANNELS
 /* Largest taps-per-phase of any shipped filter; sizes the phase history. */
 #define MIC_RESM_MAX_TAPS  24U
 /* Two cascaded stages reach the widest supported ratio, 6x. */
