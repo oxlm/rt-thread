@@ -70,10 +70,10 @@
 #define USB_ADC_MIC_TX_THREAD_PRIORITY   8U
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
 
-/* +15 dB preserves the existing 15x boost at host volume 0 dB.
+/* +18 dB preserves the existing 8x boost at host volume 0 dB.
  * Master and channel each span -100..0 dB. Slew time covers the full range. */
 #ifndef USB_ADC_MIC_GAIN_MAX_DB
-#define USB_ADC_MIC_GAIN_MAX_DB         15.0f
+#define USB_ADC_MIC_GAIN_MAX_DB         18.0f
 #endif
 #ifndef USB_ADC_MIC_GAIN_MIN_DB
 #define USB_ADC_MIC_GAIN_MIN_DB         (USB_ADC_MIC_GAIN_MAX_DB - 200.0f)
