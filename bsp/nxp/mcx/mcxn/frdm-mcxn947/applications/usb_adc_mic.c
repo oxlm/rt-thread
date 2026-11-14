@@ -7,6 +7,8 @@
  * Date           Author       Notes
  * 2026-09-05     RT-Thread    three-channel ADC USB microphone
  * 2026-11-03     RT-Thread    advertise and transmit processed mono PCM
+ * 2026-11-11     RT-Thread    apply reusable gain and USB volume/mute controls
+ * 2026-11-14     RT-Thread    use separate gain mute and volume controls
  */
 
 #include <rtthread.h>
@@ -20,6 +22,7 @@
 #include "usbd_core.h"
 #include "drv_mic.h"
 #include "mic_resample.h"
+#include "gain.h"
 
 #if defined(RT_CHERRYUSB_DEVICE_TEMPLATE_NONE) && defined(RT_CHERRYUSB_DEVICE_AUDIO)
 
@@ -66,6 +69,18 @@
 #define USB_ADC_MIC_TX_THREAD_STACK_SIZE 2048U
 #define USB_ADC_MIC_TX_THREAD_PRIORITY   8U
 #define USB_ADC_MIC_TX_THREAD_TICK       10U
+
+/* +15 dB preserves the existing 15x boost at host volume 0 dB.
+ * Master and channel each span -100..0 dB. Slew time covers the full range. */
+#ifndef USB_ADC_MIC_GAIN_MAX_DB
+#define USB_ADC_MIC_GAIN_MAX_DB         15.0f
+#endif
+#ifndef USB_ADC_MIC_GAIN_MIN_DB
+#define USB_ADC_MIC_GAIN_MIN_DB         (USB_ADC_MIC_GAIN_MAX_DB - 200.0f)
+#endif
+#ifndef USB_ADC_MIC_GAIN_SLEW_MS
+#define USB_ADC_MIC_GAIN_SLEW_MS        5U
+#endif
 
 #if (USB_ADC_MIC_CHANNELS != MIC_RESM_CHANNELS)
 #error USB_ADC_MIC_CHANNELS must match MIC_RESM_CHANNELS
@@ -190,6 +205,11 @@ static volatile uint32_t s_mic_sample_rate = USB_ADC_MIC_MAX_RATE;
 
 static volatile bool s_usb_mute_state[USB_ADC_MIC_CHANNELS + 1U];
 static volatile int s_usb_volume_db[USB_ADC_MIC_CHANNELS + 1U];
+static volatile bool s_gain_params_pending = true;
+
+/* Only the TX thread initializes, updates, processes or deinitializes gain. */
+static gain_t s_gain;
+static bool s_gain_inited;
 
 static int16_t s_capture_samples[USB_ADC_MIC_CAPTURE_FRAMES * USB_ADC_MIC_AUDIO_SLOT_BYTES / sizeof(int16_t)];
 
@@ -406,13 +426,69 @@ static bool usb_adc_mic_setup_resampler(uint32_t out_rate)
     return true;
 }
 
+static bool usb_adc_mic_update_gain(void)
+{
+    rt_base_t level;
+    int volume_db = 0;
+    bool mute = false;
+    bool pending;
+
+    /* Snapshot IRQ-owned controls together; all gain calls stay on TX. */
+    level = rt_hw_interrupt_disable();
+    pending = s_gain_params_pending || !s_gain_inited;
+    if (pending)
+    {
+        volume_db = s_usb_volume_db[0] + s_usb_volume_db[1];
+        mute = s_usb_mute_state[0] || s_usb_mute_state[1];
+        s_gain_params_pending = false;
+    }
+    rt_hw_interrupt_enable(level);
+    if (!pending)
+    {
+        return true;
+    }
+
+    if (!s_gain_inited)
+    {
+        if (gain_init(&s_gain, USB_ADC_MIC_GAIN_MAX_DB, USB_ADC_MIC_GAIN_MIN_DB,
+                      mute, USB_ADC_MIC_GAIN_SLEW_MS) != 0)
+        {
+            goto fail;
+        }
+        s_gain_inited = true;
+    }
+    /* Store volume before unmuting, so the latest target takes effect. */
+    if ((gain_set_volume(&s_gain, USB_ADC_MIC_GAIN_MAX_DB + volume_db) != 0) ||
+        (gain_set_mute(&s_gain, mute) != 0))
+    {
+        goto fail;
+    }
+    return true;
+
+fail:
+    s_gain_params_pending = true;
+    USB_LOG_ERR("ADC MIC gain configuration failed\r\n");
+    return false;
+}
+
 /* Turn one 1 ms capture frame into the packet for the negotiated rate.
  * Returns the number of bytes written to s_usb_tx_buffer. */
 static uint32_t usb_adc_mic_render(const int16_t *capture)
 {
-    uint32_t frames = mic_resampler_process(&s_resampler, capture,
-                                            USB_ADC_MIC_CAPTURE_FRAMES,
-                                            (int16_t *)s_usb_tx_buffer);
+    uint32_t frames;
+
+    if (!usb_adc_mic_update_gain())
+    {
+        return 0U;
+    }
+    frames = mic_resampler_process(&s_resampler, capture,
+                                   USB_ADC_MIC_CAPTURE_FRAMES,
+                                   (int16_t *)s_usb_tx_buffer);
+    if (gain_process(&s_gain, (int16_t *)s_usb_tx_buffer, frames,
+                     USB_ADC_MIC_CHANNELS, s_resample_rate_used) != 0)
+    {
+        return 0U;
+    }
 
     return frames * USB_ADC_MIC_AUDIO_SLOT_BYTES;
 }
@@ -429,6 +505,8 @@ static void usb_adc_mic_try_send(uint8_t busid)
         s_resampler_pending_deinit = false;
         mic_resampler_deinit(&s_resampler);
         s_resample_rate_used = 0U;
+        gain_deinit(&s_gain);
+        s_gain_inited = false;
     }
 
     if (!s_streaming)
@@ -583,7 +661,17 @@ void usbd_audio_set_volume(uint8_t busid, uint8_t ep, uint8_t ch, int volume_db)
 
     if ((ep == AUDIO_IN_EP) && (ch <= USB_ADC_MIC_CHANNELS))
     {
+        /* Match the class driver's advertised -100..0 dB, 1 dB range. */
+        if (volume_db < -100)
+        {
+            volume_db = -100;
+        }
+        else if (volume_db > 0)
+        {
+            volume_db = 0;
+        }
         s_usb_volume_db[ch] = volume_db;
+        s_gain_params_pending = true;
     }
 }
 
@@ -606,6 +694,7 @@ void usbd_audio_set_mute(uint8_t busid, uint8_t ep, uint8_t ch, bool mute)
     if ((ep == AUDIO_IN_EP) && (ch <= USB_ADC_MIC_CHANNELS))
     {
         s_usb_mute_state[ch] = mute;
+        s_gain_params_pending = true;
     }
 }
 
